@@ -6,13 +6,24 @@ export const apiSlice = createApi({
   reducerPath: "api",
   baseQuery: fetchBaseQuery({
     baseUrl: `http://${BACKEND_IP}:${BACKEND_PORT}/api/`,
+    //   prepareHeaders: (headers, { getState }) => {
+    //     const token = getState().auth?.token;
+    //     if (token) {
+    //       headers.set("Authorization", `Bearer ${token}`);
+    //     }
+    //     // ❌ DO NOT set Content-Type
+    //     return headers;
+    //   },
+    // }),
     prepareHeaders: async (headers) => {
       const token = await AsyncStorage.getItem("token");
-      if (token) headers.set("Authorization", `Bearer ${token}`);
-      // Don't force Content-Type here so multipart/form-data (FormData) works correctly.
+      if (token) {
+        headers.set("authorization", `Bearer ${token}`);
+      }
       return headers;
     },
   }),
+  tagTypes: ["Documents"],
   endpoints: (builder) => ({
     createPin: builder.mutation({
       query: (data) => ({
@@ -35,10 +46,7 @@ export const apiSlice = createApi({
         method: "POST",
         body: formData,
       }),
-    }),
-
-    getDocuments: builder.query({
-      query: () => "documents",
+      invalidatesTags: ["Documents"],
     }),
 
     Pinexist: builder.query({
@@ -50,6 +58,36 @@ export const apiSlice = createApi({
         method: "POST",
       }),
     }),
+    fetchDocuments: builder.query({
+      query: () => "documents",
+      providesTags: ["Documents"],
+    }),
+    DeleteDocument: builder.mutation({
+      query: (id) => ({
+        url: `documents/${id}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["Documents"],
+    }),
+
+    viewDocument: builder.query({
+      query: (id) => `documents/view/${id}`,
+      
+    }),
+
+    downloadDocument: builder.query({
+      query: (id) => ({
+        url: `documents/download/${id}`,
+        method: "GET",
+        responseHandler: (response) => response.blob(),
+      }),
+    }),
+    shareDocument: builder.query({
+      query: (id) => ({
+        url: `documents/share/${id}`,
+        method: "GET",
+      }),
+    }),
   }),
 });
 
@@ -57,7 +95,11 @@ export const {
   useCreatePinMutation,
   useConfirmPinMutation,
   useUploadDocumentMutation,
-  useGetDocumentsQuery,
   usePinexistQuery,
   useForgotPinMutation,
+  useFetchDocumentsQuery,
+  useDeleteDocumentMutation,
+  useLazyViewDocumentQuery,
+  useLazyDownloadDocumentQuery,
+  useLazyShareDocumentQuery,
 } = apiSlice;

@@ -1,5 +1,6 @@
 import { useRouter,useLocalSearchParams } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
 import {
   ActivityIndicator,
   Alert,
@@ -27,6 +28,8 @@ export default function index() {
   const [confirmPin, setConfirmPin] = useState(["", "", "", ""]);
   const pinRefs = useRef([]);
   const confirmRefs = useRef([]);
+  const [securePin, setSecurePin] = useState(true);
+  const [secureConfirm, setSecureConfirm] = useState(true);
 
   const [createPin] = useCreatePinMutation();
   const { data, isLoading,refetch, isError } = usePinexistQuery();
@@ -121,20 +124,26 @@ useEffect(() => {
     }
   };
 
-  const renderBoxes = (values, refs, type) => (
+  const renderBoxes = (values, refs, type, secure, onToggle) => (
     <View style={styles.pinRow}>
-      {values.map((digit, i) => (
-        <TextInput
-          key={i}
-          ref={(r) => (refs.current[i] = r)}
-          style={styles.pinBox}
-          value={digit}
-          keyboardType="number-pad"
-          maxLength={1}
-          onChangeText={(v) => handleChange(v, i, type)}
-          onKeyPress={(e) => handleKeyPress(e, i, type)}
-        />
-      ))}
+      <View style={{ flexDirection: "row", gap: 14 }}>
+        {values.map((digit, i) => (
+          <TextInput
+            key={i}
+            ref={(r) => (refs.current[i] = r)}
+            style={styles.pinBox}
+            value={digit}
+            keyboardType="number-pad"
+            secureTextEntry={secure}
+            maxLength={1}
+            onChangeText={(v) => handleChange(v, i, type)}
+            onKeyPress={(e) => handleKeyPress(e, i, type)}
+          />
+        ))}
+      </View>
+      <TouchableOpacity onPress={onToggle} style={styles.visibilityButton}>
+        <Ionicons name={secure ? "eye-off" : "eye"} size={20} color="#2563EB" />
+      </TouchableOpacity>
     </View>
   );
 
@@ -147,10 +156,10 @@ useEffect(() => {
         </Text>
 
         <Text style={styles.label}>Enter 4-digit PIN</Text>
-        {renderBoxes(pin, pinRefs, "pin")}
+        {renderBoxes(pin, pinRefs, "pin", securePin, () => setSecurePin((s) => !s))}
 
         <Text style={[styles.label, { marginTop: 24 }]}>Confirm PIN</Text>
-        {renderBoxes(confirmPin, confirmRefs, "confirm")}
+        {renderBoxes(confirmPin, confirmRefs, "confirm", secureConfirm, () => setSecureConfirm((s) => !s))}
       </View>
 
       <TouchableOpacity style={styles.button} onPress={sucessfullycreated}>
@@ -201,6 +210,7 @@ const styles = StyleSheet.create({
   pinRow: {
     flexDirection: "row",
     gap: 14,
+    alignItems: "center",
   },
   pinBox: {
     width: 56,
@@ -211,9 +221,13 @@ const styles = StyleSheet.create({
     fontSize: 20,
     textAlign: "center",
   },
+  visibilityButton: {
+    marginLeft: 12,
+    padding: 8,
+  },
   button: {
     backgroundColor: "#1976d2",
-    margin: 16,
+    margin: 46,
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: "center",

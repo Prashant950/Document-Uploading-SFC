@@ -25,6 +25,8 @@ const confirmpinscreen = () => {
   const dispatch = useDispatch();
 
   const [pin, setPin] = useState(["", "", "", ""]);
+  const [showPin, setShowPin] = useState(false);
+
   const inputRefs = useRef([]);
 
   const [confirmPin] = useConfirmPinMutation();
@@ -76,7 +78,7 @@ const confirmpinscreen = () => {
         text1: "Success",
         text2: "PIN confirmed successfully!",
       });
-      router.replace("/dashboard");
+      router.push("/dashboard");
     } catch (error) {
       Toast.show({
         type: "error",
@@ -147,11 +149,19 @@ const confirmpinscreen = () => {
               value={digit}
               keyboardType="number-pad"
               maxLength={1}
+              secureTextEntry={!showPin}
               onChangeText={(v) => handleChange(v, index)}
               onKeyPress={(e) => handleKeyPress(e, index)}
               autoFocus={index === 0}
             />
           ))}
+          <TouchableOpacity onPress={() => setShowPin(!showPin)}>
+            <Ionicons
+              name={showPin ? "eye-off" : "eye"}
+              size={20}
+              color="#2563EB"
+            />
+          </TouchableOpacity>
         </View>
         <TouchableOpacity onPress={handleForgotPin}>
           <Text style={styles.RestPin}>Forgot PIN?</Text>
@@ -216,6 +226,7 @@ const styles = StyleSheet.create({
   pinRow: {
     flexDirection: "row",
     gap: 14,
+    alignItems: "center",
   },
   pinBox: {
     width: 56,
