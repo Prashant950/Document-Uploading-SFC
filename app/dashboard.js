@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import { useRouter } from "expo-router";
@@ -13,15 +12,19 @@ import {
   Alert,
   FlatList,
   Image,
-  Modal, Platform, Pressable,
+  Modal,
+  Platform,
+  Pressable,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
+import { useRef } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
+import Ionicons from "react-native-vector-icons/Ionicons";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import WebView from "react-native-webview";
 import {
@@ -49,6 +52,8 @@ const UploadDocumentsScreen = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [docs, setDocs] = useState({});
   const [files, setFiles] = useState([]);
+  // Prevent duplicate manual uploads
+  const [isManualUploading, setIsManualUploading] = useState(false);
 
   // Group modal state to show multiple files uploaded together
   const [groupModalVisible, setGroupModalVisible] = useState(false);
@@ -219,7 +224,7 @@ const UploadDocumentsScreen = () => {
       const asset = result.assets[0];
 
       const formData = new FormData();
-      formData.append("file", {
+      formData.append("files", {
         uri: asset.fileCopyUri || asset.uri,
         name: asset.name,
         type: asset.mimeType || "application/octet-stream",
@@ -243,109 +248,156 @@ const UploadDocumentsScreen = () => {
     }
   };
 
+const manualUploadingRef = useRef(false);
+
+const handleManualUpload = async () => {
+  // 🔒 STRONG synchronous guard (DEV + PROD safe)
+  if (manualUploadingRef.current) return;
+
+  manualUploadingRef.current = true;
+  setIsManualUploading(true);
+
+  try {
+    if (!docName) {
+      Toast.show({ type: "error", text1: "Please enter document name" });
+      return;
+    }
+
+    const filesToUpload =
+      files && files.length > 0
+        ? files
+        : file
+        ? Array.isArray(file)
+          ? file
+          : [file]
+        : [];
+
+    if (filesToUpload.length === 0) {
+      Toast.show({ type: "error", text1: "Please select file(s)" });
+      return;
+    }
+
+    // 🧹 Deduplicate by URI
+    const uniqueMap = {};
+    filesToUpload.forEach((f) => {
+      const key = f.uri || `${f.name}-${f.size || 0}`;
+      if (!uniqueMap[key]) uniqueMap[key] = f;
+    });
+    const uniqueFiles = Object.values(uniqueMap);
+
+    const formData = new FormData();
+    uniqueFiles.forEach((f) => {
+      formData.append("files", {
+        uri: f.uri,
+        name: f.name,
+        type: f.mimeType || "application/octet-stream",
+      });
+    });
+
+    formData.append("docName", docName);
+    formData.append("docKey", "OTHER");
+
+    // 🔥 optional but recommended (backend dedupe)
+    formData.append(
+      "clientRequestId",
+      `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    );
+
+    const res = await uploadDocument(formData).unwrap();
+
+    const uploadedCount = res?.documents?.length ?? uniqueFiles.length;
+
+    Toast.show({
+      type: "success",
+      text1: `${uploadedCount} file(s) uploaded successfully`,
+    });
+
+    setModalVisible(false);
+    setDocName("");
+    setFile(null);
+    setFiles([]);
+  } catch (err) {
+    console.log("UPLOAD ERROR", err);
+    Toast.show({ type: "error", text1: "Upload Failed" });
+  } finally {
+    manualUploadingRef.current = false;
+    setIsManualUploading(false);
+  }
+};
+
   // const handleManualUpload = async () => {
+  //   // prevent double submissions
+  //   if (isManualUploading) return;
+
   //   try {
-  //     if (!file || !docName) {
-  //       Toast.show({
-  //         type: "error",
-  //         text1: "Please select file and enter name",
-  //       });
+  //     if (!docName) {
+  //       Toast.show({ type: "error", text1: "Please enter document name" });
   //       return;
   //     }
 
-  //     // 🔥 OPTIONAL: size warning (example: 1GB)
-  //     if (file.size > 1024 * 1024 * 1024) {
-  //       Toast.show({
-  //         type: "error",
-  //         text1: "File too large (max 1GB)",
-  //       });
+  //     // support both single `file` and multiple `files` state
+  //     const filesToUpload =
+  //       files && files.length > 0
+  //         ? files
+  //         : file
+  //           ? Array.isArray(file)
+  //             ? file
+  //             : [file]
+  //           : [];
+
+  //     if (filesToUpload.length === 0) {
+  //       Toast.show({ type: "error", text1: "Please select file(s)" });
   //       return;
   //     }
 
+  //     // Dedupe files by URI (avoid duplicates causing multiple uploads)
+  //     const uniqueMap = {};
+  //     filesToUpload.forEach((f) => {
+  //       const key = f.uri || `${f.name}-${f.size || 0}`;
+  //       if (!uniqueMap[key]) uniqueMap[key] = f;
+  //     });
+  //     const uniqueFiles = Object.values(uniqueMap);
+
+  //     if (uniqueFiles.length === 0) {
+  //       Toast.show({ type: "error", text1: "Please select file(s)" });
+  //       return;
+  //     }
+
+  //     setIsManualUploading(true);
+
+  //     // Put all files into a single FormData as `files[]`
   //     const formData = new FormData();
-
-  //     formData.append("file", {
-  //       uri: file.uri,
-  //       name: file.name,
-  //       type: file.mimeType || "application/octet-stream",
+  //     uniqueFiles.forEach((f) => {
+  //       formData.append("files", {
+  //         uri: f.uri,
+  //         name: f.name,
+  //         type: f.mimeType || "application/octet-stream",
+  //       });
   //     });
 
   //     formData.append("docName", docName);
-  //     formData.append("docKey", "Manual");
+  //     formData.append("docKey", "OTHER");
 
-  //     await uploadDocument(formData).unwrap(); // ✅ RTK Mutation
+  //     const res = await uploadDocument(formData).unwrap();
+
+  //     const uploadedCount = res?.documents?.length ?? uniqueFiles.length;
 
   //     Toast.show({
   //       type: "success",
-  //       text1: `${docName} Uploaded Successfully`,
+  //       text1: `${uploadedCount} file(s) uploaded successfully`,
   //     });
 
   //     setModalVisible(false);
   //     setDocName("");
   //     setFile(null);
-
+  //     setFiles([]);
   //   } catch (err) {
   //     console.log("UPLOAD ERROR", err);
-  //     Toast.show({
-  //       type: "error",
-  //       text1: "Upload Failed",
-  //     });
+  //     Toast.show({ type: "error", text1: "Upload Failed" });
+  //   } finally {
+  //     setIsManualUploading(false);
   //   }
   // };
-
-  const handleManualUpload = async () => {
-    try {
-      if (!docName) {
-        Toast.show({ type: "error", text1: "Please enter document name" });
-        return;
-      }
-
-      // support both single `file` and multiple `files` state
-      const filesToUpload =
-        files && files.length > 0
-          ? files
-          : file
-            ? Array.isArray(file)
-              ? file
-              : [file]
-            : [];
-
-      if (filesToUpload.length === 0) {
-        Toast.show({ type: "error", text1: "Please select file(s)" });
-        return;
-      }
-
-      // Put all files into a single FormData as `files[]`
-      const formData = new FormData();
-      filesToUpload.forEach((f) => {
-        formData.append("files", {
-          uri: f.uri,
-          name: f.name,
-          type: f.mimeType || "application/octet-stream",
-        });
-      });
-
-      formData.append("docName", docName);
-      formData.append("docKey", "OTHER");
-
-      const res = await uploadDocument(formData).unwrap();
-
-      const uploadedCount = res?.documents?.length ?? filesToUpload.length;
-
-      Toast.show({
-        type: "success",
-        text1: `${uploadedCount} file(s) uploaded successfully`,
-      });
-
-      setModalVisible(false);
-      setDocName("");
-      setFile(null);
-      setFiles([]);
-    } catch (err) {
-      console.log("UPLOAD ERROR", err);
-      Toast.show({ type: "error", text1: "Upload Failed" });
-    }
-  };
 
   const pickFile = async () => {
     try {
@@ -440,59 +492,93 @@ const UploadDocumentsScreen = () => {
     }
   };
 
+  const handleDownload = async (doc) => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+
+      // 🔥 Ask permission (Android)
+      try {
+        const { status } = await MediaLibrary.requestPermissionsAsync();
+        if (status !== "granted") {
+          Toast.show({ type: "error", text1: "Storage permission denied" });
+          return;
+        }
+      } catch (err) {
+        console.log("DOWNLOAD PERMISSION ERROR", err);
+        Toast.show({
+          type: "error",
+          text1: "Media library permission failed",
+          text2:
+            "Expo Go may be unable to request this permission on some Android versions. Create a development build or add RECORD_AUDIO to Android permissions and rebuild.",
+        });
+        return;
+      }
+
+      const tempUri =
+        FileSystem.cacheDirectory + doc.originalName.replace(/\s/g, "_");
+
+      // ⬇️ Download file
+      const downloadResumable = FileSystem.createDownloadResumable(
+        `${BASE_URL}/documents/download/${doc._id}`,
+        tempUri,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+        (progress) => {
+          const percent =
+            (progress.totalBytesWritten / progress.totalBytesExpectedToWrite) *
+            100;
+
+          console.log(`Downloading: ${percent.toFixed(0)}%`);
+        }
+      );
+
+      const { uri } = await downloadResumable.downloadAsync();
+
+      // ✅ Save to public Downloads
+      const asset = await MediaLibrary.createAssetAsync(uri);
+
+      await MediaLibrary.createAlbumAsync("Download", asset, false);
+
+      Toast.show({
+        type: "success",
+        text1: "File saved to Downloads",
+      });
+    } catch (err) {
+      console.log("DOWNLOAD ERROR", err);
+      Toast.show({
+        type: "error",
+        text1: "Download Failed",
+      });
+    }
+  };
+
   // const handleDownload = async (doc) => {
   //   try {
   //     const token = await AsyncStorage.getItem("token");
 
-  //     // 🔥 Ask permission (Android)
-  //     try {
-  //       const { status } = await MediaLibrary.requestPermissionsAsync();
-  //       if (status !== "granted") {
-  //         Toast.show({ type: "error", text1: "Storage permission denied" });
-  //         return;
-  //       }
-  //     } catch (err) {
-  //       console.log("DOWNLOAD PERMISSION ERROR", err);
-  //       Toast.show({
-  //         type: "error",
-  //         text1: "Media library permission failed",
-  //         text2:
-  //           "Expo Go may be unable to request this permission on some Android versions. Create a development build or add RECORD_AUDIO to Android permissions and rebuild.",
-  //       });
-  //       return;
-  //     }
+  //     const fileUri =
+  //       FileSystem.documentDirectory +
+  //       doc.originalName.replace(/\s/g, "_");
 
-  //     const tempUri =
-  //       FileSystem.cacheDirectory + doc.originalName.replace(/\s/g, "_");
-
-  //     // ⬇️ Download file
-  //     const downloadResumable = FileSystem.createDownloadResumable(
+  //     const result = await FileSystem.downloadAsync(
   //       `${BASE_URL}/documents/download/${doc._id}`,
-  //       tempUri,
+  //       fileUri,
   //       {
   //         headers: {
   //           Authorization: `Bearer ${token}`,
   //         },
-  //       },
-  //       (progress) => {
-  //         const percent =
-  //           (progress.totalBytesWritten / progress.totalBytesExpectedToWrite) *
-  //           100;
-
-  //         console.log(`Downloading: ${percent.toFixed(0)}%`);
   //       }
   //     );
 
-  //     const { uri } = await downloadResumable.downloadAsync();
-
-  //     // ✅ Save to public Downloads
-  //     const asset = await MediaLibrary.createAssetAsync(uri);
-
-  //     await MediaLibrary.createAlbumAsync("Download", asset, false);
+  //     // 🔥 Open Share Sheet (user can Save / Open / Send)
+  //     await Sharing.shareAsync(result.uri);
 
   //     Toast.show({
   //       type: "success",
-  //       text1: "File saved to Downloads",
+  //       text1: "Downloaded successfully",
   //     });
   //   } catch (err) {
   //     console.log("DOWNLOAD ERROR", err);
@@ -503,39 +589,6 @@ const UploadDocumentsScreen = () => {
   //   }
   // };
 
-const handleDownload = async (doc) => {
-  try {
-    const token = await AsyncStorage.getItem("token");
-
-    const fileUri =
-      FileSystem.documentDirectory +
-      doc.originalName.replace(/\s/g, "_");
-
-    const result = await FileSystem.downloadAsync(
-      `${BASE_URL}/documents/download/${doc._id}`,
-      fileUri,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
-
-    // 🔥 Open Share Sheet (user can Save / Open / Send)
-    await Sharing.shareAsync(result.uri);
-
-    Toast.show({
-      type: "success",
-      text1: "Downloaded successfully",
-    });
-  } catch (err) {
-    console.log("DOWNLOAD ERROR", err);
-    Toast.show({
-      type: "error",
-      text1: "Download Failed",
-    });
-  }
-};
   const handleShare = async (doc) => {
     try {
       const token = await AsyncStorage.getItem("token");
@@ -596,13 +649,25 @@ const handleDownload = async (doc) => {
   };
 
   const filteredDocuments = useMemo(() => {
-    // Exclude MANUAL / OTHER entries from the main "Uploaded Documents" list
-    const excludeKeys = ["MANUAL", "OTHER"];
-    const docsToShow = documents.filter((d) => !excludeKeys.includes(d.docKey));
+    const constantKeys = [
+      "AADHAAR",
+      "PAN",
+      "DL",
+      "Passport",
+      "Insurance",
+      "Salary",
+      "Bank",
+    ];
 
-    if (!searchQuery.trim()) return docsToShow;
+    // When not searching, show only MANUAL / OTHER uploaded documents in the list
+    if (!searchQuery.trim()) {
+      return documents.filter(
+        (d) => d.docKey === "MANUAL" || d.docKey === "OTHER"
+      );
+    }
 
-    return docsToShow.filter((doc) =>
+    // When searching, show ALL documents that match the query (including constants)
+    return documents.filter((doc) =>
       doc.docName.toLowerCase().includes(searchQuery.toLowerCase())
     );
   }, [documents, searchQuery]);
@@ -731,175 +796,195 @@ const handleDownload = async (doc) => {
                 onChangeText={setSearchQuery}
               />
 
-              <DocumentCard
-                title="Aadhaar Card"
-                desc="Upload ID card"
-                docKey="AADHAAR"
-                uploaded={getDoc("AADHAAR")}
-                onUpload={uploadDocumentByType}
-                onDelete={handleDelete}
-              />
-
-              <DocumentCard
-                title="PAN Card"
-                desc="Upload document"
-                docKey="PAN"
-                uploaded={getDoc("PAN")}
-                onUpload={uploadDocumentByType}
-                onDelete={handleDelete}
-              />
-
-              <DocumentCard
-                title="Driving License"
-                desc="Upload driving license"
-                docKey="DL"
-                uploaded={getDoc("DL")}
-                onUpload={uploadDocumentByType}
-                onDelete={handleDelete}
-              />
-              <DocumentCard
-                title="Passport"
-                desc="Upload passport"
-                docKey="Passport"
-                uploaded={getDoc("Passport")}
-                onUpload={uploadDocumentByType}
-                onDelete={handleDelete}
-              />
-              <DocumentCard
-                title="Insurance Policy"
-                desc="Upload Insurance Policy"
-                docKey="Insurance"
-                uploaded={getDoc("Insurance")}
-                onUpload={uploadDocumentByType}
-                onDelete={handleDelete}
-              />
-              <DocumentCard
-                title="Salary Slip"
-                desc="Upload Salary Slip"
-                docKey="Salary"
-                uploaded={getDoc("Salary")}
-                onUpload={uploadDocumentByType}
-                onDelete={handleDelete}
-              />
-              <DocumentCard
-                title="Bank Statement"
-                desc="Upload Bank Statement"
-                docKey="Bank"
-                uploaded={getDoc("Bank")}
-                onUpload={uploadDocumentByType}
-                onDelete={handleDelete}
-              />
-
-              {/* Other Documents */}
-              <Text style={styles.sectionTitle}>Other Documents</Text>
-
-              <TouchableOpacity
-                style={styles.card}
-                onPress={() => setModalVisible(true)}
-              >
-                <View style={styles.row}>
-                  <View style={[styles.iconCircle, styles.blueBg]}>
-                    <Icon name="upload-outline" size={22} color="#2563eb" />
-                  </View>
-                  <Text style={[styles.cardTitle, { flex: 1 }]}>
-                    Manually Upload Document
-                  </Text>
-                  <Icon name="chevron-right" size={26} />
-                </View>
-              </TouchableOpacity>
-              {/* MODAL */}
-              <Modal
-                transparent
-                animationType="fade"
-                visible={modalVisible}
-                onRequestClose={() => setModalVisible(false)}
-              >
-                <View style={styles.overlay}>
-                  <View style={styles.modalBox}>
-                    {/* Title */}
-                    <Text style={styles.modalTitle}>Manual Upload</Text>
-
-                    {/* Document Name */}
-                    <Text style={styles.label}>Document Name</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Enter Document Name"
-                      placeholderTextColor="#6b7280"
-                      value={docName}
-                      onChangeText={setDocName}
-                    />
-
-                    {/* File Attachment */}
-                    <Text style={[styles.label, { marginTop: 16 }]}>
-                      File Attachment
-                    </Text>
-
-                    <Pressable style={styles.uploadBox} onPress={pickFile}>
-                      <Ionicons name="cloud-upload" size={28} color="#1565C0" />
-                      <Text style={styles.uploadText}>
-                        {files && files.length > 0
-                          ? `${files.length} file(s) selected`
-                          : file
-                            ? file.name
-                            : "Click to Upload File"}
-                      </Text>
-                      <Text style={styles.fileType}>PDF, JPG, or PNG etc</Text>
-                    </Pressable>
-
-                    {/* Buttons */}
-                    <View style={styles.buttonRow}>
-                      <TouchableOpacity
-                        style={styles.cancelBtn}
-                        onPress={() => setModalVisible(false)}
-                      >
-                        <Text style={styles.cancelText}>Cancel</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={styles.uploadBtn}
-                        onPress={handleManualUpload}
-                      >
-                        <Text style={styles.uploadBtnText}>Upload</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
-              </Modal>
-              {/* Manual / Other Uploaded Summary */}
-              {groupedDocs.MANUAL?.length > 0 && (
-                <DocumentCard
-                  title={"Manual Uploads"}
-                  uploaded={groupedDocs.MANUAL[0]}
-                  countText={`${groupedDocs.MANUAL.length} Uploaded Successfully`}
-                  onView={() => {
-                    if (groupedDocs.MANUAL.length === 1) {
-                      // single file → open directly
-                      handleView(groupedDocs.MANUAL[0]);
-                    } else {
-                      // multiple files → open modal
-                      openGroupModal("Manual Uploads");
-                    }
-                  }}
-                />
-              )}
-
-              {/* Uploaded Documents */}
-              <Text style={styles.sectionTitle}>Uploaded Documents</Text>
-              {Object.keys(otherGroups).length > 0 && (
+              {!searchQuery.trim() && (
                 <>
-                  {Object.entries(otherGroups).map(([name, docs]) => (
+                  <DocumentCard
+                    title="Aadhaar Card"
+                    desc="Upload ID card"
+                    docKey="AADHAAR"
+                    uploaded={getDoc("AADHAAR")}
+                    onUpload={uploadDocumentByType}
+                    onDelete={handleDelete}
+                  />
+
+                  <DocumentCard
+                    title="PAN Card"
+                    desc="Upload document"
+                    docKey="PAN"
+                    uploaded={getDoc("PAN")}
+                    onUpload={uploadDocumentByType}
+                    onDelete={handleDelete}
+                  />
+
+                  <DocumentCard
+                    title="Driving License"
+                    desc="Upload driving license"
+                    docKey="DL"
+                    uploaded={getDoc("DL")}
+                    onUpload={uploadDocumentByType}
+                    onDelete={handleDelete}
+                  />
+                  <DocumentCard
+                    title="Passport"
+                    desc="Upload passport"
+                    docKey="Passport"
+                    uploaded={getDoc("Passport")}
+                    onUpload={uploadDocumentByType}
+                    onDelete={handleDelete}
+                  />
+                  <DocumentCard
+                    title="Insurance Policy"
+                    desc="Upload Insurance Policy"
+                    docKey="Insurance"
+                    uploaded={getDoc("Insurance")}
+                    onUpload={uploadDocumentByType}
+                    onDelete={handleDelete}
+                  />
+                  <DocumentCard
+                    title="Salary Slip"
+                    desc="Upload Salary Slip"
+                    docKey="Salary"
+                    uploaded={getDoc("Salary")}
+                    onUpload={uploadDocumentByType}
+                    onDelete={handleDelete}
+                  />
+                  <DocumentCard
+                    title="Bank Statement"
+                    desc="Upload Bank Statement"
+                    docKey="Bank"
+                    uploaded={getDoc("Bank")}
+                    onUpload={uploadDocumentByType}
+                    onDelete={handleDelete}
+                  />
+
+                  {/* Other Documents */}
+                  <Text style={styles.sectionTitle}>Other Documents</Text>
+
+                  <TouchableOpacity
+                    style={styles.card}
+                    onPress={() => setModalVisible(true)}
+                  >
+                    <View style={styles.row}>
+                      <View style={[styles.iconCircle, styles.blueBg]}>
+                        <Icon name="upload-outline" size={22} color="#2563eb" />
+                      </View>
+                      <Text style={[styles.cardTitle, { flex: 1 }]}>
+                        Manually Upload Document
+                      </Text>
+                      <Icon name="chevron-right" size={26} />
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* MODAL */}
+                  <Modal
+                    transparent
+                    animationType="fade"
+                    visible={modalVisible}
+                    onRequestClose={() => setModalVisible(false)}
+                  >
+                    <View style={styles.overlay}>
+                      <View style={styles.modalBox}>
+                        {/* Title */}
+                        <Text style={styles.modalTitle}>Manual Upload</Text>
+
+                        {/* Document Name */}
+                        <Text style={styles.label}>Document Name</Text>
+                        <TextInput
+                          style={styles.input}
+                          placeholder="Enter Document Name"
+                          placeholderTextColor="#6b7280"
+                          value={docName}
+                          onChangeText={setDocName}
+                        />
+
+                        {/* File Attachment */}
+                        <Text style={[styles.label, { marginTop: 16 }]}>
+                          File Attachment
+                        </Text>
+
+                        <Pressable style={styles.uploadBox} onPress={pickFile}>
+                          <Ionicons
+                            name="cloud-upload"
+                            size={28}
+                            color="#1565C0"
+                          />
+                          <Text style={styles.uploadText}>
+                            {files && files.length > 0
+                              ? `${files.length} file(s) selected`
+                              : file
+                                ? file.name
+                                : "Click to Upload File"}
+                          </Text>
+                          <Text style={styles.fileType}>
+                            PDF, JPG, or PNG etc
+                          </Text>
+                        </Pressable>
+
+                        {/* Buttons */}
+                        <View style={styles.buttonRow}>
+                          <TouchableOpacity
+                            style={styles.cancelBtn}
+                            onPress={() => setModalVisible(false)}
+                          >
+                            <Text style={styles.cancelText}>Cancel</Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={[
+                              styles.uploadBtn,
+                              isManualUploading && { opacity: 0.6 },
+                            ]}
+                            onPress={handleManualUpload}
+                            disabled={isManualUploading}
+                          >
+                            {isManualUploading ? (
+                              <ActivityIndicator color="#fff" />
+                            ) : (
+                              <Text style={styles.uploadBtnText}>Upload</Text>
+                            )}
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </View>
+                  </Modal>
+
+                  {/* Manual / Other Uploaded Summary */}
+                  {groupedDocs.MANUAL?.length > 0 && (
                     <DocumentCard
-                      key={name}
-                      title={name}
-                      uploaded={docs[0]}
-                      countText={`${docs.length} Uploaded Successfully`}
-                      onView={() =>
-                        docs.length === 1
-                          ? handleView(docs[0])
-                          : openGroupModal(name)
-                      }
+                      title={"Manual Uploads"}
+                      uploaded={groupedDocs.MANUAL[0]}
+                      countText={`${groupedDocs.MANUAL.length} Uploaded Successfully`}
+                      onView={() => {
+                        if (groupedDocs.MANUAL.length === 1) {
+                          // single file → open directly
+                          handleView(groupedDocs.MANUAL[0]);
+                        } else {
+                          // multiple files → open modal
+                          openGroupModal("Manual Uploads");
+                        }
+                      }}
                     />
-                  ))}
+                  )}
+
+                  {/* Uploaded Documents */}
+                  <Text style={styles.sectionTitle}>Uploaded Documents</Text>
+                  {Object.keys(otherGroups).length > 0 && (
+                    <>
+                      {Object.entries(otherGroups).map(([name, docs]) => (
+                        <DocumentCard
+                          key={name}
+                          title={name}
+                          uploaded={docs[0]}
+                          countText={`${docs.length} Uploaded Successfully`}
+                          onView={() =>
+                            docs.length === 1
+                              ? handleView(docs[0])
+                              : openGroupModal(name)
+                          }
+                        />
+                      ))}
+                    </>
+                  )}
                 </>
               )}
               {isLoading && (
