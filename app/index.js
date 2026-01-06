@@ -1,6 +1,6 @@
-import { useRouter,useLocalSearchParams } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -23,7 +23,6 @@ export default function index() {
   const params = useLocalSearchParams();
   const redirectedRef = useRef(false);
 
-
   const [pin, setPin] = useState(["", "", "", ""]);
   const [confirmPin, setConfirmPin] = useState(["", "", "", ""]);
   const pinRefs = useRef([]);
@@ -32,24 +31,22 @@ export default function index() {
   const [secureConfirm, setSecureConfirm] = useState(true);
 
   const [createPin] = useCreatePinMutation();
-  const { data, isLoading,refetch, isError } = usePinexistQuery();
+  const { data, isLoading, refetch, isError } = usePinexistQuery();
 
+  useEffect(() => {
+    if (isLoading || !data) return;
+    if (redirectedRef.current) return;
 
-useEffect(() => {
-  if (isLoading || !data) return;
-  if (redirectedRef.current) return;
+    redirectedRef.current = true;
 
-  redirectedRef.current = true;
-
-  if (data.exists) {
-    // 🔐 PIN already created → ask for confirm PIN
-    router.replace("/Confirmpin");
-  } else {
-    // ✅ No PIN → stay on index.js (Create PIN UI)
-    // ❌ DO NOTHING (already on index)
-  }
-}, [data, isLoading]);
-
+    if (data.exists) {
+      // 🔐 PIN already created → ask for confirm PIN
+      router.replace("/Confirmpin");
+    } else {
+      // ✅ No PIN → stay on index.js (Create PIN UI)
+      // ❌ DO NOTHING (already on index)
+    }
+  }, [data, isLoading]);
 
   if (isLoading) {
     return (
@@ -156,11 +153,24 @@ useEffect(() => {
         </Text>
 
         <Text style={styles.label}>Enter 4-digit PIN</Text>
-        {renderBoxes(pin, pinRefs, "pin", securePin, () => setSecurePin((s) => !s))}
+        {renderBoxes(pin, pinRefs, "pin", securePin, () =>
+          setSecurePin((s) => !s)
+        )}
 
         <Text style={[styles.label, { marginTop: 24 }]}>Confirm PIN</Text>
-        {renderBoxes(confirmPin, confirmRefs, "confirm", secureConfirm, () => setSecureConfirm((s) => !s))}
+        {renderBoxes(confirmPin, confirmRefs, "confirm", secureConfirm, () =>
+          setSecureConfirm((s) => !s)
+        )}
       </View>
+
+      <TouchableOpacity
+        style={{ alignSelf: "center", marginTop: 12, marginBottom: 6 }}
+        onPress={() => router.push("/Confirmpin")}
+        accessible
+        accessibilityRole="link"
+      >
+        <Text style={styles.RestPin}>Already have PIN?</Text>
+      </TouchableOpacity>
 
       <TouchableOpacity style={styles.button} onPress={sucessfullycreated}>
         <Text style={styles.buttonText}>Create PIN</Text>
@@ -211,6 +221,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 14,
     alignItems: "center",
+  },
+   RestPin: {
+    color: "#1976d2",
+    fontSize: 16,
+    fontWeight: "600",
+    marginTop: 20,
   },
   pinBox: {
     width: 56,

@@ -7,6 +7,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as IntentLauncher from "expo-intent-launcher";
 import * as MediaLibrary from "expo-media-library";
 import * as Sharing from "expo-sharing";
+import { useRef } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -21,7 +22,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useRef } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 import Ionicons from "react-native-vector-icons/Ionicons";
@@ -54,11 +54,14 @@ const UploadDocumentsScreen = () => {
   const [files, setFiles] = useState([]);
   // Prevent duplicate manual uploads
   const [isManualUploading, setIsManualUploading] = useState(false);
+  // Global per-action loading state: { type: 'view'|'download'|'share'|'delete'|'upload' | null, id: docId or docKey }
+  const [loadingAction, setLoadingAction] = useState({ type: null, id: null });
 
   // Group modal state to show multiple files uploaded together
   const [groupModalVisible, setGroupModalVisible] = useState(false);
   const [groupFilesList, setGroupFilesList] = useState([]);
   const [groupTitle, setGroupTitle] = useState("");
+  const manualUploadingRef = useRef(false);
 
   // Preview state for group modal
   const [groupPreviewUri, setGroupPreviewUri] = useState(null);
@@ -82,30 +85,6 @@ const UploadDocumentsScreen = () => {
   ] = useLazyDownloadDocumentQuery();
   const [shareDocument, { isLoading: isLoadingShare, isError: isErrorShare }] =
     useLazyShareDocumentQuery();
-
-  useEffect(() => {
-    if (!documents || documents.length === 0) return;
-
-    setDocs((prev) => {
-      const newDocs = {
-        AADHAAR: documents.find((d) => d.docKey === "AADHAAR") || null,
-        PAN: documents.find((d) => d.docKey === "PAN") || null,
-        DL: documents.find((d) => d.docKey === "DL") || null,
-        Passport: documents.find((d) => d.docKey === "Passport") || null,
-        Insurance: documents.find((d) => d.docKey === "Insurance") || null,
-        Salary: documents.find((d) => d.docKey === "Salary") || null,
-        Bank: documents.find((d) => d.docKey === "Bank") || null,
-      };
-
-      // ✅ Only update if different from previous
-      const isSame = Object.keys(newDocs).every(
-        (key) => newDocs[key]?._id === prev[key]?._id
-      );
-      if (isSame) return prev;
-
-      return newDocs;
-    });
-  }, [documents]);
 
   const getDoc = useCallback(
     (docKey) => documents.find((d) => d.docKey === docKey) || null,
@@ -213,49 +192,52 @@ const UploadDocumentsScreen = () => {
   // End preview helpers
 
   const uploadDocumentByType = async (type, label) => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: "*/*",
-        copyToCacheDirectory: true,
-      });
+  setLoadingAction({ type: "upload", id: type });
+  try {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: "*/*",
+      copyToCacheDirectory: true,
+    });
 
-      if (result.canceled) return;
+    if (result.canceled) return;
 
-      const asset = result.assets[0];
+    const asset = result.assets[0];
 
-      const formData = new FormData();
-      formData.append("files", {
-        uri: asset.fileCopyUri || asset.uri,
-        name: asset.name,
-        type: asset.mimeType || "application/octet-stream",
-      });
+    const formData = new FormData();
+    formData.append("files", {
+      uri: asset.fileCopyUri || asset.uri,
+      name: asset.name,
+      type: asset.mimeType || "application/octet-stream",
+    });
 
-      formData.append("docName", label);
-      formData.append("docKey", type);
+    formData.append("docName", label);
+    formData.append("docKey", type);
 
-      await uploadDocument(formData).unwrap(); // 🔥 IMPORTANT
+    await uploadDocument(formData).unwrap(); // 🔥 IMPORTANT
 
-      Toast.show({
-        type: "success",
-        text1: `${label} Uploaded`,
-      });
-    } catch (err) {
-      console.log("UPLOAD ERROR 👉", err);
-      Toast.show({
-        type: "error",
-        text1: "Upload Failed",
-      });
-    }
+    Toast.show({
+      type: "success",
+      text1: `${label} Uploaded`,
+    });
+  } catch (err) {
+    console.log("UPLOAD ERROR 👉", err);
+    Toast.show({
+      type: "error",
+      text1: "Upload Failed",
+    });
+  } finally {
+    setLoadingAction({ type: null, id: null });
   };
+  };
+  
 
-const manualUploadingRef = useRef(false);
+  const handleManualUpload = async () => {
+    // 🔒 STRONG synchronous guard (DEV + PROD safe)
+    if (manualUploadingRef.current) return;
 
-const handleManualUpload = async () => {
-  // 🔒 STRONG synchronous guard (DEV + PROD safe)
-  if (manualUploadingRef.current) return;
-
-  manualUploadingRef.current = true;
-  setIsManualUploading(true);
+    manualUploadingRef.current = true;
+    setIsManualUploading(true);
+  setLoadingAction({ type: "upload", id: "OTHER" });
 
   try {
     if (!docName) {
@@ -322,13 +304,10 @@ const handleManualUpload = async () => {
   } finally {
     manualUploadingRef.current = false;
     setIsManualUploading(false);
+    setLoadingAction({ type: null, id: null });
   }
-};
-
+  };
   // const handleManualUpload = async () => {
-  //   // prevent double submissions
-  //   if (isManualUploading) return;
-
   //   try {
   //     if (!docName) {
   //       Toast.show({ type: "error", text1: "Please enter document name" });
@@ -437,6 +416,7 @@ const handleManualUpload = async () => {
   };
 
   const handleView = async (doc) => {
+    setLoadingAction({ type: "view", id: doc._id });
     try {
       const token = await AsyncStorage.getItem("token");
 
@@ -489,10 +469,13 @@ const handleManualUpload = async () => {
         type: "error",
         text1: "Cannot open file",
       });
+    } finally {
+      setLoadingAction({ type: null, id: null });
     }
   };
 
   const handleDownload = async (doc) => {
+    setLoadingAction({ type: "download", id: doc._id });
     try {
       const token = await AsyncStorage.getItem("token");
 
@@ -552,6 +535,8 @@ const handleManualUpload = async () => {
         type: "error",
         text1: "Download Failed",
       });
+    } finally {
+      setLoadingAction({ type: null, id: null });
     }
   };
 
@@ -590,6 +575,7 @@ const handleManualUpload = async () => {
   // };
 
   const handleShare = async (doc) => {
+    setLoadingAction({ type: "share", id: doc._id });
     try {
       const token = await AsyncStorage.getItem("token");
 
@@ -605,6 +591,8 @@ const handleManualUpload = async () => {
       await Sharing.shareAsync(fileUri);
     } catch (err) {
       Toast.show({ type: "error", text1: "Share Failed" });
+    } finally {
+      setLoadingAction({ type: null, id: null });
     }
   };
 
@@ -622,6 +610,7 @@ const handleManualUpload = async () => {
           style: "destructive",
           onPress: async () => {
             try {
+              setLoadingAction({ type: "delete", id: doc._id });
               await deleteDocument(doc._id).unwrap();
 
               // ✅ ONLY reset that document (keep card)
@@ -641,6 +630,8 @@ const handleManualUpload = async () => {
                 type: "error",
                 text1: "Delete Failed",
               });
+            } finally {
+              setLoadingAction({ type: null, id: null });
             }
           },
         },
@@ -648,28 +639,41 @@ const handleManualUpload = async () => {
     );
   };
 
-  const filteredDocuments = useMemo(() => {
-    const constantKeys = [
-      "AADHAAR",
-      "PAN",
-      "DL",
-      "Passport",
-      "Insurance",
-      "Salary",
-      "Bank",
-    ];
+  // const filteredDocuments = useMemo(() => {
+  //   const constantKeys = [
+  //     "AADHAAR",
+  //     "PAN",
+  //     "DL",
+  //     "Passport",
+  //     "Insurance",
+  //     "Salary",
+  //     "Bank",
+  //   ];
 
-    // When not searching, show only MANUAL / OTHER uploaded documents in the list
-    if (!searchQuery.trim()) {
-      return documents.filter(
-        (d) => d.docKey === "MANUAL" || d.docKey === "OTHER"
+  //   // When not searching, show only MANUAL / OTHER uploaded documents in the list
+  //   if (!searchQuery.trim()) {
+  //     return documents.filter(
+  //       (d) => d.docKey === "MANUAL" || d.docKey === "OTHER"
+  //     );
+  //   }
+
+  //   // When searching, show ALL documents that match the query (including constants)
+  //   return documents.filter((doc) =>
+  //     doc.docName.toLowerCase().includes(searchQuery.toLowerCase())
+  //   );
+  // }, [documents, searchQuery]);
+
+  const filteredDocuments = useMemo(() => {
+    // 🔎 SEARCH MODE → show matching documents
+    if (searchQuery.trim()) {
+      return documents.filter((doc) =>
+        doc.docName.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
 
-    // When searching, show ALL documents that match the query (including constants)
-    return documents.filter((doc) =>
-      doc.docName.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    // 📂 NORMAL MODE → header already shows MANUAL/OTHER groups
+    // Return an empty list so uploaded docs are shown only in the header
+    return [];
   }, [documents, searchQuery]);
 
   const DocumentCard = ({
@@ -725,8 +729,13 @@ const handleManualUpload = async () => {
             <TouchableOpacity
               style={styles.primaryBtn}
               onPress={() => onUpload(docKey, title)}
+              disabled={loadingAction.type === "upload" && loadingAction.id === docKey}
             >
-              <Text style={styles.primaryBtnText}>Upload</Text>
+              {loadingAction.type === "upload" && loadingAction.id === docKey ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.primaryBtnText}>Upload</Text>
+              )}
             </TouchableOpacity>
           )}
         </View>
@@ -737,41 +746,61 @@ const handleManualUpload = async () => {
             <TouchableOpacity
               style={styles.actionBtn}
               onPress={() => (onView ? onView(uploaded) : handleView(uploaded))}
+              disabled={loadingAction.type === "view" && loadingAction.id === uploaded._id}
             >
-              <Icon name="eye-outline" size={20} color="#2563EB" />
-              <Text style={[styles.actionText, { color: "#2563EB" }]}>
-                View
-              </Text>
+              {loadingAction.type === "view" && loadingAction.id === uploaded._id ? (
+                <ActivityIndicator color="#2563EB" />
+              ) : (
+                <>
+                  <Icon name="eye-outline" size={20} color="#2563EB" />
+                  <Text style={[styles.actionText, { color: "#2563EB" }]}>View</Text>
+                </>
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.actionBtn}
               onPress={() => handleDownload(uploaded)}
+              disabled={loadingAction.type === "download" && loadingAction.id === uploaded._id}
             >
-              <Icon name="download-outline" size={20} color="#16A34A" />
-              <Text style={[styles.actionText, { color: "#16A34A" }]}>
-                Save
-              </Text>
+              {loadingAction.type === "download" && loadingAction.id === uploaded._id ? (
+                <ActivityIndicator color="#16A34A" />
+              ) : (
+                <>
+                  <Icon name="download-outline" size={20} color="#16A34A" />
+                  <Text style={[styles.actionText, { color: "#16A34A" }]}>Save</Text>
+                </>
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.actionBtn}
               onPress={() => handleShare(uploaded)}
+              disabled={loadingAction.type === "share" && loadingAction.id === uploaded._id}
             >
-              <Icon name="share-variant-outline" size={20} color="#7C3AED" />
-              <Text style={[styles.actionText, { color: "#7C3AED" }]}>
-                Share
-              </Text>
+              {loadingAction.type === "share" && loadingAction.id === uploaded._id ? (
+                <ActivityIndicator color="#7C3AED" />
+              ) : (
+                <>
+                  <Icon name="share-variant-outline" size={20} color="#7C3AED" />
+                  <Text style={[styles.actionText, { color: "#7C3AED" }]}>Share</Text>
+                </>
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.actionBtn}
               onPress={() => handleDelete(uploaded)}
+              disabled={loadingAction.type === "delete" && loadingAction.id === uploaded._id}
             >
-              <Icon name="delete-outline" size={20} color="#DC2626" />
-              <Text style={[styles.actionText, { color: "#DC2626" }]}>
-                Delete
-              </Text>
+              {loadingAction.type === "delete" && loadingAction.id === uploaded._id ? (
+                <ActivityIndicator color="#DC2626" />
+              ) : (
+                <>
+                  <Icon name="delete-outline" size={20} color="#DC2626" />
+                  <Text style={[styles.actionText, { color: "#DC2626" }]}>Delete</Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
         )}
@@ -909,7 +938,7 @@ const handleManualUpload = async () => {
                             color="#1565C0"
                           />
                           <Text style={styles.uploadText}>
-                            {files && files.length > 0
+                            {files && files.length > 1
                               ? `${files.length} file(s) selected`
                               : file
                                 ? file.name
