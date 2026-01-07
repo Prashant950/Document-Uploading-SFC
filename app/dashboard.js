@@ -503,96 +503,60 @@ const previewIndex = (index) => {
     }
   };
 
-  const handleDownload = async (doc) => {
-    setLoadingAction({ type: "download", id: doc._id });
-    try {
-      const token = await AsyncStorage.getItem("token");
-
-      // 🔥 Ask permission (Android)
-      try {
-        const { status } = await MediaLibrary.requestPermissionsAsync();
-        if (status !== "granted") {
-          Toast.show({ type: "error", text1: "Storage permission denied" });
-          return;
-        }
-      } catch (err) {
-        console.log("DOWNLOAD PERMISSION ERROR", err);
-        Toast.show({
-          type: "error",
-          text1: "Media library permission failed",
-          text2:
-            "Expo Go may be unable to request this permission on some Android versions. Create a development build or add RECORD_AUDIO to Android permissions and rebuild.",
-        });
-        return;
-      }
-
-      const tempUri =
-        FileSystem.cacheDirectory + doc.originalName.replace(/\s/g, "_");
-
-      // ⬇️ Download file
-      const downloadResumable = FileSystem.createDownloadResumable(
-        `${BASE_URL}/documents/download/${doc._id}`,
-        tempUri,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-        (progress) => {
-          const percent =
-            (progress.totalBytesWritten / progress.totalBytesExpectedToWrite) *
-            100;
-
-          console.log(`Downloading: ${percent.toFixed(0)}%`);
-        }
-      );
-
-      const { uri } = await downloadResumable.downloadAsync();
-
-      // ✅ Save to public Downloads
-      const asset = await MediaLibrary.createAssetAsync(uri);
-
-      await MediaLibrary.createAlbumAsync("Download", asset, false);
-
-      Toast.show({
-        type: "success",
-        text1: "File saved to Downloads",
-      });
-    } catch (err) {
-      console.log("DOWNLOAD ERROR", err);
-      Toast.show({
-        type: "error",
-        text1: "Download Failed",
-      });
-    } finally {
-      setLoadingAction({ type: null, id: null });
-    }
-  };
-
   // const handleDownload = async (doc) => {
+  //   setLoadingAction({ type: "download", id: doc._id });
   //   try {
   //     const token = await AsyncStorage.getItem("token");
 
-  //     const fileUri =
-  //       FileSystem.documentDirectory +
-  //       doc.originalName.replace(/\s/g, "_");
+  //     // 🔥 Ask permission (Android)
+  //     try {
+  //       const { status } = await MediaLibrary.requestPermissionsAsync();
+  //       if (status !== "granted") {
+  //         Toast.show({ type: "error", text1: "Storage permission denied" });
+  //         return;
+  //       }
+  //     } catch (err) {
+  //       console.log("DOWNLOAD PERMISSION ERROR", err);
+  //       Toast.show({
+  //         type: "error",
+  //         text1: "Media library permission failed",
+  //         text2:
+  //           "Expo Go may be unable to request this permission on some Android versions. Create a development build or add RECORD_AUDIO to Android permissions and rebuild.",
+  //       });
+  //       return;
+  //     }
 
-  //     const result = await FileSystem.downloadAsync(
+  //     const tempUri =
+  //       FileSystem.cacheDirectory + doc.originalName.replace(/\s/g, "_");
+
+  //     // ⬇️ Download file
+  //     const downloadResumable = FileSystem.createDownloadResumable(
   //       `${BASE_URL}/documents/download/${doc._id}`,
-  //       fileUri,
+  //       tempUri,
   //       {
   //         headers: {
   //           Authorization: `Bearer ${token}`,
   //         },
+  //       },
+  //       (progress) => {
+  //         const percent =
+  //           (progress.totalBytesWritten / progress.totalBytesExpectedToWrite) *
+  //           100;
+
+  //         console.log(`Downloading: ${percent.toFixed(0)}%`);
   //       }
   //     );
 
-  //     // 🔥 Open Share Sheet (user can Save / Open / Send)
-  //     await Sharing.shareAsync(result.uri);
+  //     const { uri } = await downloadResumable.downloadAsync();
+
+  //     // ✅ Save to public Downloads
+  //     const asset = await MediaLibrary.createAssetAsync(uri);
+
+  //     await MediaLibrary.createAlbumAsync("Download", asset, false);
 
   //     Toast.show({
   //       type: "success",
-  //       text1: "Downloaded successfully",
+  //       text1: "File saved to Downloads",
   //     });
   //   } catch (err) {
   //     console.log("DOWNLOAD ERROR", err);
@@ -600,8 +564,57 @@ const previewIndex = (index) => {
   //       type: "error",
   //       text1: "Download Failed",
   //     });
+  //   } finally {
+  //     setLoadingAction({ type: null, id: null });
   //   }
   // };
+
+const handleDownload = async (doc) => {
+  setLoadingAction({ type: "download", id: doc._id });
+
+  try {
+    const token = await AsyncStorage.getItem("token");
+
+    const safeName = (doc.originalName || "file")
+      .replace(/\s/g, "_");
+
+    const fileUri = FileSystem.documentDirectory + safeName;
+
+    const downloadResumable = FileSystem.createDownloadResumable(
+      `${BASE_URL}/documents/download/${doc._id}`,
+      fileUri,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+      (progress) => {
+        const percent =
+          (progress.totalBytesWritten /
+            progress.totalBytesExpectedToWrite) *
+          100;
+        console.log(`Downloading: ${percent.toFixed(0)}%`);
+      }
+    );
+
+    const { uri } = await downloadResumable.downloadAsync();
+
+    Toast.show({
+      type: "success",
+      text1: "Download completed",
+    });
+
+
+  } catch (err) {
+    console.log("DOWNLOAD ERROR", err);
+    Toast.show({
+      type: "error",
+      text1: "Download Failed",
+    });
+  } finally {
+    setLoadingAction({ type: null, id: null });
+  }
+};
 
   const handleShare = async (doc) => {
     setLoadingAction({ type: "share", id: doc._id });
@@ -1259,7 +1272,7 @@ const handleDelete = (doc) => {
                         }}
                       >
                         <Text style={{ color: "#6b7280" }}>
-                          Preview not available
+                          Please open with native app.
                         </Text>
                         <TouchableOpacity
                           onPress={() =>
