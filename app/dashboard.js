@@ -181,13 +181,22 @@ const UploadDocumentsScreen = () => {
     }
   };
 
-  const previewIndex = (newIndex) => {
-    if (!groupFilesList || groupFilesList.length === 0) return;
-    const clamped =
-      ((newIndex % groupFilesList.length) + groupFilesList.length) %
-      groupFilesList.length;
-    previewGroupFileByDocs(groupFilesList, clamped);
-  };
+// const previewIndex = (newIndex) => {
+//     if (!groupFilesList || groupFilesList.length === 0) return;
+//     const clamped =
+//       ((newIndex % groupFilesList.length) + groupFilesList.length) %
+//       groupFilesList.length;
+//     previewGroupFileByDocs(groupFilesList, clamped);
+//   };
+const previewIndex = (index) => {
+  if (index < 0 || index >= groupFilesList.length) return;
+
+  const file = groupFilesList[index];
+  setActiveIndex(index);
+  setGroupPreviewUri(file.fileUrl);
+  setGroupPreviewType(file.contentType);
+};
+
 
   useEffect(() => {
     if (!groupModalVisible) {
@@ -616,48 +625,48 @@ const UploadDocumentsScreen = () => {
     }
   };
 
-  const handleDelete = (doc) => {
-    Alert.alert(
-      "Delete Document",
-      `Are you sure you want to delete ${doc.docName}?`,
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setLoadingAction({ type: "delete", id: doc._id });
-              await deleteDocument(doc._id).unwrap();
+// const handleDelete = (doc) => {
+  //   Alert.alert(
+  //     "Delete Document",
+  //     `Are you sure you want to delete ${doc.docName}?`,
+  //     [
+  //       {
+  //         text: "Cancel",
+  //         style: "cancel",
+  //       },
+  //       {
+  //         text: "Delete",
+  //         style: "destructive",
+  //         onPress: async () => {
+  //           try {
+  //             setLoadingAction({ type: "delete", id: doc._id });
+  //             await deleteDocument(doc._id).unwrap();
 
-              // ✅ ONLY reset that document (keep card)
-              setDocs((prev) => ({
-                ...prev,
-                [doc.docKey]: null,
-              }));
+  //             // ✅ ONLY reset that document (keep card)
+  //             setDocs((prev) => ({
+  //               ...prev,
+  //               [doc.docKey]: null,
+  //             }));
 
-              Toast.show({
-                type: "success",
-                text1: `${doc.docName} Deleted`,
-                text2: "Successfully",
-              });
-            } catch (err) {
-              console.log("DELETE ERROR", err);
-              Toast.show({
-                type: "error",
-                text1: "Delete Failed",
-              });
-            } finally {
-              setLoadingAction({ type: null, id: null });
-            }
-          },
-        },
-      ]
-    );
-  };
+  //             Toast.show({
+  //               type: "success",
+  //               text1: `${doc.docName} Deleted`,
+  //               text2: "Successfully",
+  //             });
+  //           } catch (err) {
+  //             console.log("DELETE ERROR", err);
+  //             Toast.show({
+  //               type: "error",
+  //               text1: "Delete Failed",
+  //             });
+  //           } finally {
+  //             setLoadingAction({ type: null, id: null });
+  //           }
+  //         },
+  //       },
+  //     ]
+  //   );
+  // };
 
   // const filteredDocuments = useMemo(() => {
   //   const constantKeys = [
@@ -682,6 +691,68 @@ const UploadDocumentsScreen = () => {
   //     doc.docName.toLowerCase().includes(searchQuery.toLowerCase())
   //   );
   // }, [documents, searchQuery]);
+const handleDelete = (doc) => {
+  Alert.alert(
+    "Delete Document",
+    `Are you sure you want to delete ${doc.docName || doc.originalName}?`,
+    [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            setLoadingAction({ type: "delete", id: doc._id });
+
+            // 🔥 1️⃣ IMMEDIATE UI UPDATE (Modal / Group)
+            setGroupFilesList((prev) => {
+              const updated = prev.filter((d) => d._id !== doc._id);
+
+              // preview index fix
+              if (activeIndex >= updated.length) {
+                setActiveIndex(Math.max(updated.length - 1, 0));
+              }
+
+              // close modal if empty
+              if (updated.length === 0) {
+                setGroupPreviewUri(null);
+                setGroupPreviewType(null);
+                setGroupModalVisible(false); // 👈 modal close
+              }
+
+              return updated;
+            });
+
+            // 🔥 2️⃣ BACKEND DELETE
+            await deleteDocument(doc._id).unwrap();
+
+            // 🔥 3️⃣ DASHBOARD RESET (single-doc cards)
+            setDocs((prev) => ({
+              ...prev,
+              [doc.docKey]: null,
+            }));
+
+            Toast.show({
+              type: "success",
+              text1: "Document deleted",
+            });
+          } catch (err) {
+            console.log("DELETE ERROR", err);
+            Toast.show({
+              type: "error",
+              text1: "Delete Failed",
+            });
+          } finally {
+            setLoadingAction({ type: null, id: null });
+          }
+        },
+      },
+    ]
+  );
+};
 
   const filteredDocuments = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
