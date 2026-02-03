@@ -1,170 +1,359 @@
-import { StyleSheet, Text, View, TouchableOpacity } from "react-native";
-import React from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-const router = useRouter();
-const index2 = () => {
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Keyboard,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import Toast from "react-native-toast-message";
 
-const redirectToDashboard = () => {
-  router.push("/Confirmpin");
-}
+import {
+  useAdminpincreateMutation,
+  useAdminPinexistQuery,useUserCreatePinMutation,
+} from "../src/services/apiSlice";
+import { useSelector } from "react-redux";
 
-  return (
-  <View style={styles.container}>
+export default function index() {
+  const router = useRouter();
+  const params = useLocalSearchParams();
+  const redirectedRef = useRef(false);
 
-    {/* Center Content */}
-    <View style={styles.centerContent}>
-      <View style={styles.iconWrapper}>
-        <Ionicons
-          name="checkmark-circle-outline"
-          size={64}
-          color="#1976d2"
-        />
+  const [pin, setPin] = useState(["", "", "", ""]);
+  const [confirmPin, setConfirmPin] = useState(["", "", "", ""]);
+  const pinRefs = useRef([]);
+  const confirmRefs = useRef([]);
+  const [securePin, setSecurePin] = useState(true);
+  const [secureConfirm, setSecureConfirm] = useState(true);
+  // Loading state when creating PIN
+  const [creatingPin, setCreatingPin] = useState(false);
+
+  const [createPin, isLoadingPIN] = useAdminpincreateMutation();
+  const { data, isLoading, refetch, isError } = useAdminPinexistQuery();
+
+  const [userCreatePin, isLoadingUserCreatePin] = useUserCreatePinMutation();
+
+
+  const role = useSelector((state) => state.auth.role);
+  // useEffect(() => {
+  //   if (isLoading || !data) return;
+  //   if (redirectedRef.current) return;
+
+  //   redirectedRef.current = true;
+
+  //   if (data.exists) {
+  //     // 🔐 PIN already created → ask for confirm PIN
+  //     router.replace("/Confirmpin");
+  //   } else {
+  //     // ✅ No PIN → stay on index.js (Create PIN UI)
+  //     // ❌ DO NOTHING (already on index)
+  //   }
+  // }, [data, isLoading]);
+
+  // useEffect(() => {
+  //   if (isLoading || !data) return;
+  //   if (redirectedRef.current) return;
+
+  //   redirectedRef.current = true;
+
+  //   if (data.exists) {
+  //     router.replace("/Confirmpin");
+  //   }
+  // }, [data, isLoading]);
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center" }}>
+        <ActivityIndicator size="large" />
       </View>
+    );
+  }
 
-      <Text style={styles.title}>PIN Created Successfully</Text>
+const sucessfullycreated = async () => {
+  const pinValue = pin.join("");
+  const confirmPinValue = confirmPin.join("");
 
-      <Text style={styles.subtitle}>
-        Your secure PIN is now active. Use it to quickly and safely access
-        your account.
-      </Text>
+  if (pinValue.length !== 4 || confirmPinValue.length !== 4) {
+    Toast.show({ type: "error", text1: "PIN must be 4 digits" });
+    return;
+  }
 
-      {/* Divider */}
-      <View style={styles.divider} />
+  if (pinValue !== confirmPinValue) {
+    Toast.show({ type: "error", text1: "PINs do not match" });
+    return;
+  }
 
-      {/* Info Cards */}
-      <View style={styles.infoBox}>
-        <Ionicons name="shield-checkmark-outline" size={22} color="#16a34a" />
-        <Text style={styles.infoText}>
-          Your account is now protected with an additional security layer.
-        </Text>
-      </View>
+  try {
+    setCreatingPin(true);
 
-      <View style={styles.infoBox}>
-        <Ionicons name="lock-closed-outline" size={22} color="#2563eb" />
-        <Text style={styles.infoText}>
-          Do not share your PIN with anyone for safety reasons.
-        </Text>
-      </View>
+    // 🔥 ROLE BASED API CALL
+    if (role === "admin") {
+      await createPin({ pin: pinValue }).unwrap();
+    } else if (role === "user") {
+      await userCreatePin({ pin: pinValue }).unwrap();
+    } else {
+      throw new Error("Invalid role");
+    }
 
-      {/* Next Steps */}
-      
-    </View>
+    await AsyncStorage.setItem("PIN_CREATED", "true");
 
-    {/* Bottom Button */}
-    <TouchableOpacity style={styles.button} onPress={redirectToDashboard}>
-      <Text style={styles.buttonText}>Continue to Dashboard</Text>
-    </TouchableOpacity>
-  </View>
-);
+    Toast.show({
+      type: "success",
+      text1: "Success",
+      text2: "PIN created successfully",
+    });
+
+    router.replace("/Confirmpin");
+  } catch (error) {
+    Toast.show({
+      type: "error",
+      text1: "Error",
+      text2: error?.data?.message || error.message || "Failed to create PIN",
+    });
+  } finally {
+    setCreatingPin(false);
+    setPin(["", "", "", ""]);
+    setConfirmPin(["", "", "", ""]);
+  }
 };
 
-export default index2;
+
+  const handleChange = (value, index, type) => {
+    if (!/^\d?$/.test(value)) return;
+
+    const newPin = type === "pin" ? [...pin] : [...confirmPin];
+    newPin[index] = value;
+
+    type === "pin" ? setPin(newPin) : setConfirmPin(newPin);
+
+    if (value && index < 3) {
+      (type === "pin" ? pinRefs : confirmRefs).current[index + 1]?.focus();
+    }
+
+    if (index === 3 && value) {
+      Keyboard.dismiss();
+    }
+  };
+
+  const handleKeyPress = (e, index, type) => {
+    if (e.nativeEvent.key === "Backspace") {
+      const newPin = type === "pin" ? [...pin] : [...confirmPin];
+
+      if (newPin[index] === "" && index > 0) {
+        (type === "pin" ? pinRefs : confirmRefs).current[index - 1]?.focus();
+      }
+
+      newPin[index] = "";
+      type === "pin" ? setPin(newPin) : setConfirmPin(newPin);
+    }
+  };
+
+  const renderBoxes = (values, refs, type, secure) => (
+    <View style={styles.pinRow}>
+      <View style={styles.pinBoxesContainer}>
+        {values.map((digit, i) => (
+          <TextInput
+            key={i}
+            ref={(r) => (refs.current[i] = r)}
+            style={[
+              styles.pinBox,
+              i !== values.length - 1 && { marginRight: 14 },
+            ]}
+            value={digit}
+            keyboardType="number-pad"
+            secureTextEntry={secure}
+            maxLength={1}
+            onChangeText={(v) => handleChange(v, i, type)}
+            onKeyPress={(e) => handleKeyPress(e, i, type)}
+          />
+        ))}
+      </View>
+    </View>
+  );
+
+  return (
+    <View style={styles.container}>
+      <View style={[styles.content, styles.card]}>
+        <Text style={styles.title}>Set up your PIN</Text>
+        <Text style={styles.subtitle}>
+          This PIN will be used to access your account.
+        </Text>
+
+        <Text style={styles.label}>Enter 4-digit PIN</Text>
+        {renderBoxes(pin, pinRefs, "pin", securePin)}
+
+        <Text style={[styles.label, { marginTop: 24 }]}>Confirm PIN</Text>
+        {renderBoxes(confirmPin, confirmRefs, "confirm", secureConfirm)}
+
+        {/* View icon (top-right of card) */}
+        <TouchableOpacity
+          style={styles.topRightEye}
+          onPress={() => {
+            setSecurePin((s) => !s);
+            setSecureConfirm((s) => !s);
+          }}
+          accessibilityLabel="Toggle PIN visibility"
+        >
+          <Ionicons
+            name={securePin && secureConfirm ? "eye-off" : "eye"}
+            size={20}
+            color="#2563EB"
+          />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={{ position: "absolute", bottom: 120, right: 16 }}
+          onPress={() => router.push("/Confirmpin")}
+          accessible
+          accessibilityRole="link"
+        >
+          <Text style={styles.RestPin}>Already have PIN?</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/** form validation */}
+      <TouchableOpacity
+        style={[
+          styles.button,
+          (creatingPin ||
+            !(
+              pin.join("").length === 4 && pin.join("") === confirmPin.join("")
+            )) && { opacity: 0.6 },
+        ]}
+        onPress={sucessfullycreated}
+        disabled={
+          creatingPin ||
+          !(pin.join("").length === 4 && pin.join("") === confirmPin.join(""))
+        }
+      >
+        {creatingPin ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.buttonText}>Create PIN</Text>
+        )}
+      </TouchableOpacity>
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#ffffff",
-    paddingBottom: 50,
+    backgroundColor: "#f3f4f6",
+    paddingBottom: 40,
   },
   header: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    alignItems: "center",
+    padding: 16,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#111827",
   },
-  centerContent: {
+  content: {
     flex: 1,
     alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 32,
+    paddingHorizontal: 24,
+    marginTop: 40,
   },
-  iconWrapper: {
-    width: 110,
-    height: 110,
-    borderRadius: 55,
-    backgroundColor: "#e3f2fd",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 28,
+  card: {
+    width: "100%",
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 6,
   },
   title: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: "700",
-    color: "#111827",
-    textAlign: "center",
-    marginBottom: 12,
+    marginBottom: 6,
+    color: "#0f172a",
   },
   subtitle: {
-    fontSize: 15,
-    color: "#6b7280",
     textAlign: "center",
-    lineHeight: 22,
+    color: "#64748b",
+    fontSize: 14,
+    marginBottom: 24,
+  },
+  label: {
+    fontSize: 15,
+    fontWeight: "600",
+    marginBottom: 12,
+    color: "#0f172a",
+  },
+  pinRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pinBoxesContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  RestPin: {
+    color: "#1976d2",
+    fontSize: 16,
+    fontWeight: "600",
+    marginTop: 20,
+  },
+  pinBox: {
+    width: 64,
+    height: 64,
+    borderWidth: 1,
+    borderRadius: 12,
+    borderColor: "#e6edf3",
+    backgroundColor: "#fff",
+    fontSize: 20,
+    textAlign: "center",
+    color: "#0f172a",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  visibilityButton: {
+    marginLeft: 12,
+    padding: 8,
+  },
+  topRightEye: {
+    position: "absolute",
+    top: 16,
+    right: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#eef2ff",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 6,
   },
   button: {
     backgroundColor: "#1976d2",
-    margin: 16,
+    marginHorizontal: 24,
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: "center",
+    marginTop: 16,
   },
   buttonText: {
-    color: "#ffffff",
+    color: "#fff",
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "700",
   },
-  divider: {
-  height: 1,
-  backgroundColor: "#e5e7eb",
-  width: "100%",
-  marginVertical: 24,
-},
-
-infoBox: {
-  flexDirection: "row",
-  alignItems: "center",
-  backgroundColor: "#f9fafb",
-  padding: 14,
-  borderRadius: 12,
-  marginBottom: 12,
-  width: "100%",
-},
-
-infoText: {
-  marginLeft: 10,
-  color: "#374151",
-  fontSize: 14,
-  flex: 1,
-},
-
-nextSteps: {
-  marginTop: 24,
-  width: "100%",
-},
-
-nextTitle: {
-  fontSize: 16,
-  fontWeight: "600",
-  color: "#111827",
-  marginBottom: 12,
-},
-
-stepRow: {
-  flexDirection: "row",
-  alignItems: "center",
-  marginBottom: 10,
-},
-
-stepText: {
-  marginLeft: 10,
-  fontSize: 14,
-  color: "#374151",
-},
-
 });

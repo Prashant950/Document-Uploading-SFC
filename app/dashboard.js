@@ -8,6 +8,7 @@ import * as IntentLauncher from "expo-intent-launcher";
 import * as MediaLibrary from "expo-media-library";
 import * as Sharing from "expo-sharing";
 import { useRef } from "react";
+import { RefreshControl } from "react-native";
 import {
   ActivityIndicator,
   Alert,
@@ -26,7 +27,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import WebView from "react-native-webview";
+//import {WebView} from "react-native-webview";
+import JSZip from "jszip";
+
 import {
   useDeleteDocumentMutation,
   useFetchDocumentsQuery,
@@ -52,6 +55,8 @@ const UploadDocumentsScreen = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [docs, setDocs] = useState({});
   const [files, setFiles] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
+
   // Prevent duplicate manual uploads
   const [isManualUploading, setIsManualUploading] = useState(false);
   // Global per-action loading state: { type: 'view'|'download'|'share'|'delete'|'upload' | null, id: docId or docKey }
@@ -70,7 +75,12 @@ const UploadDocumentsScreen = () => {
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
   const [uploadDocument, { error }] = useUploadDocumentMutation();
-  const { data: documents = [], isLoading, isError } = useFetchDocumentsQuery();
+  const {
+    data: documents = [],
+    refetch,
+    isLoading,
+    isError,
+  } = useFetchDocumentsQuery();
   const [
     deleteDocument,
     { isLoading: isLoadingDelete, isError: isErrorDelete },
@@ -110,6 +120,26 @@ const UploadDocumentsScreen = () => {
     });
     return map;
   }, [groupedDocs.OTHER]);
+  const resetUploadForm = () => {
+    setDocName("");
+    setFile(null);
+    setFiles([]);
+  };
+  const handleCancel = () => {
+    resetUploadForm();
+    setModalVisible(false);
+  };
+
+  const onRefreshAll = async () => {
+    setRefreshing(true);
+    try {
+      await refetch(); // RTK Query
+    } catch (e) {
+      console.log("REFRESH ERROR", e);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const openGroupModal = (nameOrDocs) => {
     let docs = [];
@@ -181,22 +211,21 @@ const UploadDocumentsScreen = () => {
     }
   };
 
-// const previewIndex = (newIndex) => {
-//     if (!groupFilesList || groupFilesList.length === 0) return;
-//     const clamped =
-//       ((newIndex % groupFilesList.length) + groupFilesList.length) %
-//       groupFilesList.length;
-//     previewGroupFileByDocs(groupFilesList, clamped);
-//   };
-const previewIndex = (index) => {
-  if (index < 0 || index >= groupFilesList.length) return;
+  // const previewIndex = (newIndex) => {
+  //     if (!groupFilesList || groupFilesList.length === 0) return;
+  //     const clamped =
+  //       ((newIndex % groupFilesList.length) + groupFilesList.length) %
+  //       groupFilesList.length;
+  //     previewGroupFileByDocs(groupFilesList, clamped);
+  //   };
+  const previewIndex = (index) => {
+    if (index < 0 || index >= groupFilesList.length) return;
 
-  const file = groupFilesList[index];
-  setActiveIndex(index);
-  setGroupPreviewUri(file.fileUrl);
-  setGroupPreviewType(file.contentType);
-};
-
+    const file = groupFilesList[index];
+    setActiveIndex(index);
+    setGroupPreviewUri(file.fileUrl);
+    setGroupPreviewType(file.contentType);
+  };
 
   useEffect(() => {
     if (!groupModalVisible) {
@@ -291,10 +320,10 @@ const previewIndex = (index) => {
         files?.length > 0
           ? files
           : file
-            ? Array.isArray(file)
-              ? file
-              : [file]
-            : [];
+          ? Array.isArray(file)
+            ? file
+            : [file]
+          : [];
 
       if (allFiles.length === 0) {
         Toast.show({ type: "error", text1: "Please select file(s)" });
@@ -503,36 +532,95 @@ const previewIndex = (index) => {
     }
   };
 
+  const handleDownload = async (doc) => {
+    setLoadingAction({ type: "download", id: doc._id });
+
+    try {
+      const token = await AsyncStorage.getItem("token");
+
+      const fileName = (doc.originalName || "document").replace(
+        /[^a-zA-Z0-9._-]/g,
+        "_"
+      );
+
+      // 1️⃣ Ask user ONCE where to save (Android rule)
+      const permission =
+        await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+
+      if (!permission.granted) {
+        Toast.show({
+          type: "error",
+          text1: "Permission denied",
+        });
+        return;
+      }
+
+      // 2️⃣ Create file in selected directory
+      const fileUri = await FileSystem.StorageAccessFramework.createFileAsync(
+        permission.directoryUri,
+        fileName,
+        doc.mimeType || "application/octet-stream"
+      );
+
+      // 3️⃣ Download file to cache
+      const tempUri = FileSystem.cacheDirectory + fileName;
+
+      const downloadResumable = FileSystem.createDownloadResumable(
+        `${BASE_URL}/documents/download/${doc._id}`,
+        tempUri,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+        (progress) => {
+          const percent =
+            (progress.totalBytesWritten / progress.totalBytesExpectedToWrite) *
+            100;
+          console.log(`Downloading: ${percent.toFixed(0)}%`);
+        }
+      );
+
+      const { uri } = await downloadResumable.downloadAsync();
+
+      // 4️⃣ Write file to selected folder (DIRECT SAVE)
+      const fileBase64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      await FileSystem.writeAsStringAsync(fileUri, fileBase64, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      Toast.show({
+        type: "success",
+        text1: "Downloaded successfully",
+      });
+    } catch (err) {
+      console.log("DOWNLOAD ERROR 👉", err);
+      Toast.show({
+        type: "error",
+        text1: "Download Failed",
+      });
+    } finally {
+      setLoadingAction({ type: null, id: null });
+    }
+  };
+
   // const handleDownload = async (doc) => {
   //   setLoadingAction({ type: "download", id: doc._id });
+
   //   try {
   //     const token = await AsyncStorage.getItem("token");
 
-  //     // 🔥 Ask permission (Android)
-  //     try {
-  //       const { status } = await MediaLibrary.requestPermissionsAsync();
-  //       if (status !== "granted") {
-  //         Toast.show({ type: "error", text1: "Storage permission denied" });
-  //         return;
-  //       }
-  //     } catch (err) {
-  //       console.log("DOWNLOAD PERMISSION ERROR", err);
-  //       Toast.show({
-  //         type: "error",
-  //         text1: "Media library permission failed",
-  //         text2:
-  //           "Expo Go may be unable to request this permission on some Android versions. Create a development build or add RECORD_AUDIO to Android permissions and rebuild.",
-  //       });
-  //       return;
-  //     }
+  //     const safeName = (doc.originalName || "file")
+  //       .replace(/\s/g, "_");
 
-  //     const tempUri =
-  //       FileSystem.cacheDirectory + doc.originalName.replace(/\s/g, "_");
+  //     const fileUri = FileSystem.documentDirectory + safeName;
 
-  //     // ⬇️ Download file
   //     const downloadResumable = FileSystem.createDownloadResumable(
   //       `${BASE_URL}/documents/download/${doc._id}`,
-  //       tempUri,
+  //       fileUri,
   //       {
   //         headers: {
   //           Authorization: `Bearer ${token}`,
@@ -540,24 +628,20 @@ const previewIndex = (index) => {
   //       },
   //       (progress) => {
   //         const percent =
-  //           (progress.totalBytesWritten / progress.totalBytesExpectedToWrite) *
+  //           (progress.totalBytesWritten /
+  //             progress.totalBytesExpectedToWrite) *
   //           100;
-
   //         console.log(`Downloading: ${percent.toFixed(0)}%`);
   //       }
   //     );
 
   //     const { uri } = await downloadResumable.downloadAsync();
 
-  //     // ✅ Save to public Downloads
-  //     const asset = await MediaLibrary.createAssetAsync(uri);
-
-  //     await MediaLibrary.createAlbumAsync("Download", asset, false);
-
   //     Toast.show({
   //       type: "success",
-  //       text1: "File saved to Downloads",
+  //       text1: "Download completed",
   //     });
+
   //   } catch (err) {
   //     console.log("DOWNLOAD ERROR", err);
   //     Toast.show({
@@ -569,54 +653,7 @@ const previewIndex = (index) => {
   //   }
   // };
 
-const handleDownload = async (doc) => {
-  setLoadingAction({ type: "download", id: doc._id });
-
-  try {
-    const token = await AsyncStorage.getItem("token");
-
-    const safeName = (doc.originalName || "file")
-      .replace(/\s/g, "_");
-
-    const fileUri = FileSystem.documentDirectory + safeName;
-
-    const downloadResumable = FileSystem.createDownloadResumable(
-      `${BASE_URL}/documents/download/${doc._id}`,
-      fileUri,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      },
-      (progress) => {
-        const percent =
-          (progress.totalBytesWritten /
-            progress.totalBytesExpectedToWrite) *
-          100;
-        console.log(`Downloading: ${percent.toFixed(0)}%`);
-      }
-    );
-
-    const { uri } = await downloadResumable.downloadAsync();
-
-    Toast.show({
-      type: "success",
-      text1: "Download completed",
-    });
-
-
-  } catch (err) {
-    console.log("DOWNLOAD ERROR", err);
-    Toast.show({
-      type: "error",
-      text1: "Download Failed",
-    });
-  } finally {
-    setLoadingAction({ type: null, id: null });
-  }
-};
-
-  const handleShare = async (doc) => {
+const handleShare = async (doc) => {
     setLoadingAction({ type: "share", id: doc._id });
     try {
       const token = await AsyncStorage.getItem("token");
@@ -638,50 +675,7 @@ const handleDownload = async (doc) => {
     }
   };
 
-// const handleDelete = (doc) => {
-  //   Alert.alert(
-  //     "Delete Document",
-  //     `Are you sure you want to delete ${doc.docName}?`,
-  //     [
-  //       {
-  //         text: "Cancel",
-  //         style: "cancel",
-  //       },
-  //       {
-  //         text: "Delete",
-  //         style: "destructive",
-  //         onPress: async () => {
-  //           try {
-  //             setLoadingAction({ type: "delete", id: doc._id });
-  //             await deleteDocument(doc._id).unwrap();
-
-  //             // ✅ ONLY reset that document (keep card)
-  //             setDocs((prev) => ({
-  //               ...prev,
-  //               [doc.docKey]: null,
-  //             }));
-
-  //             Toast.show({
-  //               type: "success",
-  //               text1: `${doc.docName} Deleted`,
-  //               text2: "Successfully",
-  //             });
-  //           } catch (err) {
-  //             console.log("DELETE ERROR", err);
-  //             Toast.show({
-  //               type: "error",
-  //               text1: "Delete Failed",
-  //             });
-  //           } finally {
-  //             setLoadingAction({ type: null, id: null });
-  //           }
-  //         },
-  //       },
-  //     ]
-  //   );
-  // };
-
-  // const filteredDocuments = useMemo(() => {
+// const filteredDocuments = useMemo(() => {
   //   const constantKeys = [
   //     "AADHAAR",
   //     "PAN",
@@ -704,68 +698,68 @@ const handleDownload = async (doc) => {
   //     doc.docName.toLowerCase().includes(searchQuery.toLowerCase())
   //   );
   // }, [documents, searchQuery]);
-const handleDelete = (doc) => {
-  Alert.alert(
-    "Delete Document",
-    `Are you sure you want to delete ${doc.docName || doc.originalName}?`,
-    [
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            setLoadingAction({ type: "delete", id: doc._id });
-
-            // 🔥 1️⃣ IMMEDIATE UI UPDATE (Modal / Group)
-            setGroupFilesList((prev) => {
-              const updated = prev.filter((d) => d._id !== doc._id);
-
-              // preview index fix
-              if (activeIndex >= updated.length) {
-                setActiveIndex(Math.max(updated.length - 1, 0));
-              }
-
-              // close modal if empty
-              if (updated.length === 0) {
-                setGroupPreviewUri(null);
-                setGroupPreviewType(null);
-                setGroupModalVisible(false); // 👈 modal close
-              }
-
-              return updated;
-            });
-
-            // 🔥 2️⃣ BACKEND DELETE
-            await deleteDocument(doc._id).unwrap();
-
-            // 🔥 3️⃣ DASHBOARD RESET (single-doc cards)
-            setDocs((prev) => ({
-              ...prev,
-              [doc.docKey]: null,
-            }));
-
-            Toast.show({
-              type: "success",
-              text1: "Document deleted",
-            });
-          } catch (err) {
-            console.log("DELETE ERROR", err);
-            Toast.show({
-              type: "error",
-              text1: "Delete Failed",
-            });
-          } finally {
-            setLoadingAction({ type: null, id: null });
-          }
+  const handleDelete = (doc) => {
+    Alert.alert(
+      "Delete Document",
+      `Are you sure you want to delete ${doc.docName || doc.originalName}?`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
         },
-      },
-    ]
-  );
-};
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setLoadingAction({ type: "delete", id: doc._id });
+
+              // 🔥 1️⃣ IMMEDIATE UI UPDATE (Modal / Group)
+              setGroupFilesList((prev) => {
+                const updated = prev.filter((d) => d._id !== doc._id);
+
+                // preview index fix
+                if (activeIndex >= updated.length) {
+                  setActiveIndex(Math.max(updated.length - 1, 0));
+                }
+
+                // close modal if empty
+                if (updated.length === 0) {
+                  setGroupPreviewUri(null);
+                  setGroupPreviewType(null);
+                  setGroupModalVisible(false); // 👈 modal close
+                }
+
+                return updated;
+              });
+
+              // 🔥 2️⃣ BACKEND DELETE
+              await deleteDocument(doc._id).unwrap();
+
+              // 🔥 3️⃣ DASHBOARD RESET (single-doc cards)
+              setDocs((prev) => ({
+                ...prev,
+                [doc.docKey]: null,
+              }));
+
+              Toast.show({
+                type: "success",
+                text1: "Document deleted",
+              });
+            } catch (err) {
+              console.log("DELETE ERROR", err);
+              Toast.show({
+                type: "error",
+                text1: "Delete Failed",
+              });
+            } finally {
+              setLoadingAction({ type: null, id: null });
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const filteredDocuments = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -966,6 +960,9 @@ const handleDelete = (doc) => {
       <View style={styles.container}>
         <FlatList
           data={filteredDocuments}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefreshAll} />
+          }
           keyExtractor={(item) => item._id}
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={
@@ -1094,8 +1091,8 @@ const handleDelete = (doc) => {
                             {files && files.length > 1
                               ? `${files.length} file(s) selected`
                               : file
-                                ? file.name
-                                : "Click to Upload File"}
+                              ? file.name
+                              : "Click to Upload File"}
                           </Text>
                           <Text style={styles.fileType}>
                             PDF, JPG, or PNG etc
@@ -1106,7 +1103,8 @@ const handleDelete = (doc) => {
                         <View style={styles.buttonRow}>
                           <TouchableOpacity
                             style={styles.cancelBtn}
-                            onPress={() => setModalVisible(false)}
+                            onPress={handleCancel}
+                            disabled={isManualUploading}
                           >
                             <Text style={styles.cancelText}>Cancel</Text>
                           </TouchableOpacity>
@@ -1328,8 +1326,9 @@ const handleDelete = (doc) => {
                 </View>
               </>
             ) : (
-              <Text style={{ color: "#6b7280" }}>Select a file to preview</Text>
-            )}
+              <View/>
+            )} 
+              
           </View>
 
           <View style={{ paddingHorizontal: 16 }}>

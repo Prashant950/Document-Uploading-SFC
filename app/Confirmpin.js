@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useRef, useState } from "react";
+import { useSelector } from "react-redux";
 import {
   Alert,
   Keyboard,
@@ -14,10 +15,9 @@ import {
 import Toast from "react-native-toast-message";
 import { useDispatch } from "react-redux";
 
-import { logout } from "../src/features/authSlice";
 import {
-  useConfirmPinMutation,
-  useForgotPinMutation,
+  useAdminconfirmPinMutation,
+  useAdminforgotPinMutation,useUserConfirmPinMutation,useUserForgotPinMutation,
 } from "../src/services/apiSlice";
 
 const confirmpinscreen = () => {
@@ -29,10 +29,12 @@ const confirmpinscreen = () => {
 
   const inputRefs = useRef([]);
 
-  const [confirmPin] = useConfirmPinMutation();
+  const [confirmPin] = useAdminconfirmPinMutation();
+  const [forgotPin] = useAdminforgotPinMutation();
+const [userConfirmPin, isLoadingUserConfirmPin] = useUserConfirmPinMutation();
+const [userForgotPin] = useUserForgotPinMutation();
 
-  const [forgotPin] = useForgotPinMutation();
-
+const role = useSelector((state) => state.auth.role);
   const handleChange = (value, index) => {
     if (!/^\d?$/.test(value)) return;
 
@@ -62,32 +64,117 @@ const confirmpinscreen = () => {
     }
   };
 
-  const handleConfirm = async () => {
-    const pinValue = pin.join("");
+  // const handleConfirm = async () => {
+  //   const pinValue = pin.join("");
 
-    if (pinValue.length < 4) {
-      Alert.alert("Error", "Please enter a 4-digit PIN.");
-      return;
+  //   if (pinValue.length < 4) {
+  //     Alert.alert("Error", "Please enter a 4-digit PIN.");
+  //     return;
+  //   }
+
+  //   try {
+  //     const res = await confirmPin({ pin: pinValue }).unwrap();
+  //     const { token, role } = res;
+
+  //     // Save both token and role to AsyncStorage
+  //     await AsyncStorage.setItem("token", token);
+  //     if (role) {
+  //       await AsyncStorage.setItem("role", role);
+  //     }
+
+  //     Toast.show({
+  //       type: "success",
+  //       text1: "Success",
+  //       text2: "PIN confirmed successfully!",
+  //     });
+  //     router.replace("/(Dashboard)");
+  //   } catch (error) {
+  //     Toast.show({
+  //       type: "error",
+  //       text1: "Error",
+  //       text2: "PIN Mismatch, Please try again.",
+  //     });
+  //   }
+  //   setPin(["", "", "", ""]);
+  // };
+// const handleConfirm = async () => {
+//     const pinValue = pin.join("");
+
+//     if (pinValue.length < 4) {
+//       Alert.alert("Error", "Please enter a 4-digit PIN.");
+//       return;
+//     }
+
+//     try {
+    
+
+//       if (role === "admin") {
+//       await confirmPin({ pin: pinValue }).unwrap();
+//     } else if (role === "user") {
+//       await userConfirmPin({ pin: pinValue }).unwrap();
+//     } else {
+//       throw new Error("Invalid role");
+//     }
+
+//       if (!response?.token) {
+//         throw new Error("Token missing");
+//       }
+
+//       await AsyncStorage.setItem("token", response.token);
+//       await AsyncStorage.setItem("role", response.role);
+
+//       Toast.show({
+//         type: "success",
+//         text1: "Success",
+//         text2: "PIN confirmed successfully!",
+//       });
+
+//       router.replace("/(Dashboard)");
+//     } catch (error) {
+//       Toast.show({
+//         type: "error",
+//         text1: "Error",
+//         text2: error?.data?.message || "PIN mismatch",
+//       });
+//     } finally {
+//       setPin(["", "", "", ""]);
+//     }
+//   };
+
+const handleConfirm = async () => {
+  const pinValue = pin.join("");
+
+  if (pinValue.length !== 4) {
+    Alert.alert("Error", "Please enter a 4-digit PIN.");
+    return;
+  }
+
+  try {
+    if (role === "admin") {
+      await confirmPin({ pin: pinValue }).unwrap();
+    } else if (role === "user") {
+      await userConfirmPin({ pin: pinValue }).unwrap();
+    } else {
+      throw new Error("Invalid role");
     }
 
-    try {
-      const res = await confirmPin({ pin: pinValue }).unwrap();
-      await AsyncStorage.setItem("token", res.token);
-      Toast.show({
-        type: "success",
-        text1: "Success",
-        text2: "PIN confirmed successfully!",
-      });
-      router.push("/dashboard");
-    } catch (error) {
-      Toast.show({
-        type: "error",
-        text1: "Error",
-        text2: "PIN Mismatch, Please try again.",
-      });
-    }
+    Toast.show({
+      type: "success",
+      text1: "Success",
+      text2: "PIN confirmed successfully!",
+    });
+
+    router.replace("/(Dashboard)");
+  } catch (error) {
+    Toast.show({
+      type: "error",
+      text1: "Error",
+      text2: error?.data?.message || "PIN mismatch",
+    });
+  } finally {
     setPin(["", "", "", ""]);
-  };
+  }
+};
 
   const handleForgotPin = () => {
     Alert.alert("Forgot PIN", "Your PIN will be permanently deleted", [
@@ -97,10 +184,16 @@ const confirmpinscreen = () => {
         style: "destructive",
         onPress: async () => {
           try {
-            await forgotPin().unwrap();
+            if (role === "admin") {
+              await forgotPin().unwrap();
+            } else if (role === "user") {
+              await userForgotPin().unwrap();
+            } else {
+              throw new Error("Invalid role");
+            }
 
-            await AsyncStorage.removeItem("token");
-            dispatch(logout());
+            // 🔥 Clear only the PIN_CREATED flag (keep role/token intact)
+            await AsyncStorage.removeItem("PIN_CREATED");
 
             Toast.show({
               type: "success",
@@ -108,15 +201,28 @@ const confirmpinscreen = () => {
               text2: "Create a new PIN",
             });
 
-            // 🔥 Force index to know PIN was deleted
-            router.replace("/");
+            router.replace("/Pincreated");
           } catch (error) {
-            console.log(error);
-            Toast.show({
-              type: "error",
-              text1: "Error",
-              text2: "Failed to delete PIN",
-            });
+            console.log("Forgot PIN Error:", error);
+
+            if (error?.data?.message === "No PIN found") {
+              // 🔥 Clear only the PIN_CREATED flag (keep role/token intact)
+              await AsyncStorage.removeItem("PIN_CREATED");
+
+              Toast.show({
+                type: "info",
+                text1: "No PIN Found",
+                text2: "Creating new PIN...",
+              });
+
+              router.replace("/Pincreated");
+            } else {
+              Toast.show({
+                type: "error",
+                text1: "Error",
+                text2: error?.data?.message || "Failed to delete PIN",
+              });
+            }
           }
         },
       },
@@ -256,6 +362,14 @@ const styles = StyleSheet.create({
   RestPin: {
     color: "#1976d2",
     fontSize: 16,
+    fontWeight: "600",
+    marginTop: 20,
+  },
+  RestPin1: {
+    fontWeight: "600",
+    marginTop: 20,
+  },
+  RestPin1: {
     fontWeight: "600",
     marginTop: 20,
   },
