@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import Toast from "react-native-toast-message";
 import { useDispatch } from "react-redux";
-
+import { useEffect } from "react";
 import {
   useAdminconfirmPinMutation,
   useAdminforgotPinMutation,useUserConfirmPinMutation,useUserForgotPinMutation,
@@ -35,6 +35,16 @@ const [userConfirmPin, isLoadingUserConfirmPin] = useUserConfirmPinMutation();
 const [userForgotPin] = useUserForgotPinMutation();
 
 const role = useSelector((state) => state.auth.role);
+const token = useSelector((state) => state.auth.token);
+const user = useSelector((state) => state.auth.user);
+
+
+// useEffect(() => {
+//   if (!token || !user) {
+//     router.replace("/EnterMobile");
+//   }
+// }, [token, user]);
+
   const handleChange = (value, index) => {
     if (!/^\d?$/.test(value)) return;
 
@@ -63,83 +73,6 @@ const role = useSelector((state) => state.auth.role);
       setPin(newPin);
     }
   };
-
-  // const handleConfirm = async () => {
-  //   const pinValue = pin.join("");
-
-  //   if (pinValue.length < 4) {
-  //     Alert.alert("Error", "Please enter a 4-digit PIN.");
-  //     return;
-  //   }
-
-  //   try {
-  //     const res = await confirmPin({ pin: pinValue }).unwrap();
-  //     const { token, role } = res;
-
-  //     // Save both token and role to AsyncStorage
-  //     await AsyncStorage.setItem("token", token);
-  //     if (role) {
-  //       await AsyncStorage.setItem("role", role);
-  //     }
-
-  //     Toast.show({
-  //       type: "success",
-  //       text1: "Success",
-  //       text2: "PIN confirmed successfully!",
-  //     });
-  //     router.replace("/(Dashboard)");
-  //   } catch (error) {
-  //     Toast.show({
-  //       type: "error",
-  //       text1: "Error",
-  //       text2: "PIN Mismatch, Please try again.",
-  //     });
-  //   }
-  //   setPin(["", "", "", ""]);
-  // };
-// const handleConfirm = async () => {
-//     const pinValue = pin.join("");
-
-//     if (pinValue.length < 4) {
-//       Alert.alert("Error", "Please enter a 4-digit PIN.");
-//       return;
-//     }
-
-//     try {
-    
-
-//       if (role === "admin") {
-//       await confirmPin({ pin: pinValue }).unwrap();
-//     } else if (role === "user") {
-//       await userConfirmPin({ pin: pinValue }).unwrap();
-//     } else {
-//       throw new Error("Invalid role");
-//     }
-
-//       if (!response?.token) {
-//         throw new Error("Token missing");
-//       }
-
-//       await AsyncStorage.setItem("token", response.token);
-//       await AsyncStorage.setItem("role", response.role);
-
-//       Toast.show({
-//         type: "success",
-//         text1: "Success",
-//         text2: "PIN confirmed successfully!",
-//       });
-
-//       router.replace("/(Dashboard)");
-//     } catch (error) {
-//       Toast.show({
-//         type: "error",
-//         text1: "Error",
-//         text2: error?.data?.message || "PIN mismatch",
-//       });
-//     } finally {
-//       setPin(["", "", "", ""]);
-//     }
-//   };
 
 const handleConfirm = async () => {
   const pinValue = pin.join("");

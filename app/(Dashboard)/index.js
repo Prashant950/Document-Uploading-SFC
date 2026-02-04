@@ -1,16 +1,20 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
+import * as FileSystem from "expo-file-system/legacy";
+import * as IntentLauncher from "expo-intent-launcher";
+import * as MediaLibrary from "expo-media-library";
 import { useRouter } from "expo-router";
 import * as ScreenCapture from "expo-screen-capture";
+import * as Sharing from "expo-sharing";
 import { useCallback, useState } from "react";
 import {
+  Alert,
   FlatList,
   Image,
-  Alert,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
-  KeyboardAvoidingView,
   ScrollView,
   StyleSheet,
   Text,
@@ -22,19 +26,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import MaterialCommunityIcons from "react-native-vector-icons/MaterialCommunityIcons";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { logout } from "../../src/features/authSlice";
-import * as FileSystem from "expo-file-system/legacy";
-import * as IntentLauncher from "expo-intent-launcher";
-import * as MediaLibrary from "expo-media-library";
-import * as Sharing from "expo-sharing";
-import { useEffect } from "react";
-import { useSelector } from "react-redux";
 import {
   useAdminApproveUserMutation,
   useAdminDocumentDeleteMutation,
   useCheckApprovalQuery,
-  useGetDocumentWithCategoriesQuery,useGetUserNameQuery,
+  useGetDocumentWithCategoriesQuery,
+  useGetUserNameQuery,
 } from "../../src/services/apiSlice";
 
 import { BACKEND_IP, BACKEND_PORT } from "../../src/config";
@@ -43,8 +42,7 @@ const API_BASE_URL = `http://${BACKEND_IP}:${BACKEND_PORT}/api`;
 // download progress tracker in toast
 let lastProgress = 0;
 const Index = () => {
-
-const role = useSelector((state) => state.auth.role);
+  const role = useSelector((state) => state.auth.role);
 
   const router = useRouter();
   const dispatch = useDispatch();
@@ -59,6 +57,23 @@ const role = useSelector((state) => state.auth.role);
 
   const { data: documentCategoriesData, refetch } =
     useGetDocumentWithCategoriesQuery({ docKey: "FINANCIAL_ADVISORY" });
+
+  // Get separate data for each category
+  const { data: clientStrategyData } = useGetDocumentWithCategoriesQuery({
+    docKey: "CLIENT_STRATEGY",
+  });
+  const { data: ConsultantReportData } = useGetDocumentWithCategoriesQuery({
+    docKey: "CONSULTANT_REPORT",
+  });
+const {data : ContractsData} = useGetDocumentWithCategoriesQuery({
+  docKey : "CONTRACT"
+});
+const {data: HRRecordsData} = useGetDocumentWithCategoriesQuery({
+  docKey : "HR_RECORD"
+});
+const {data: OtherDocumentsData} = useGetDocumentWithCategoriesQuery({
+  docKey : "OTHER"
+});
 
   const redirectclientStrategies = () => {
     router.push("/(Dashboard)/AllDocuments/ClientStrategies");
@@ -79,8 +94,6 @@ const role = useSelector((state) => state.auth.role);
   } = useCheckApprovalQuery();
 
   // Strategy documents (client strategies)
-  const { data: strategyDocumentsData, refetch: refetchStrategies } =
-    useGetDocumentWithCategoriesQuery({});
   const { data: profileData } = useGetUserNameQuery();
 
   // 🔒 Prevent Screenshots
@@ -184,10 +197,6 @@ const role = useSelector((state) => state.auth.role);
       .toLowerCase()
       .includes(searchQuery.trim().toLowerCase());
   });
-
-  const strategyDocuments = Array.isArray(strategyDocumentsData)
-    ? strategyDocumentsData
-    : strategyDocumentsData?.documents || strategyDocumentsData?.data || [];
 
   const displayDocuments =
     searchQuery.trim() === "" ? allDocuments : filteredDocuments;
@@ -488,7 +497,9 @@ const role = useSelector((state) => state.auth.role);
                   style={styles.logo}
                 />
                 <View>
-                  <Text style={styles.adminText}>{profileData?.name?.toUpperCase()} CONTROL</Text>
+                  <Text style={styles.adminText}>
+                    {profileData?.name?.toUpperCase()} CONTROL
+                  </Text>
                   <Text style={styles.welcomeText}>
                     {/* Welcome, {userNameData?.name || "Admin"} */}
                     Welcome{profileData?.name ? `, ${profileData?.name}` : ""}
@@ -499,22 +510,26 @@ const role = useSelector((state) => state.auth.role);
               {/* //  logout button */}
               <View style={styles.headerRight}>
                 {role !== "user" && (
-                <TouchableOpacity
-                  style={styles.notification}
-                  onPress={() => setModalVisible(true)}
-                >
-                  <Ionicons
-                    name="notifications-outline"
-                    size={22}
-                    color="#111827"
-                  />
-                  <View style={styles.notificationDot} />
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.notification}
+                    onPress={() => setModalVisible(true)}
+                  >
+                    <Ionicons
+                      name="notifications-outline"
+                      size={22}
+                      color="#111827"
+                    />
+                    <View style={styles.notificationDot} />
+                  </TouchableOpacity>
                 )}
-                
 
                 <TouchableOpacity
-                  style={{ marginTop: 8, marginLeft: 30,marginRight: -10,marginBottom: 7 }}
+                  style={{
+                    marginTop: 8,
+                    marginLeft: 30,
+                    marginRight: -10,
+                    marginBottom: 7,
+                  }}
                   onPress={async () => {
                     try {
                       await AsyncStorage.removeItem("token");
@@ -579,7 +594,7 @@ const role = useSelector((state) => state.auth.role);
                 <Text style={styles.categoryName}>Client Strategies</Text>
                 <View style={styles.infoPill}>
                   <Text style={styles.infoText}>
-                    {filteredDocuments.length} Files
+                    {(clientStrategyData?.documents || []).length} Files
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -598,7 +613,7 @@ const role = useSelector((state) => state.auth.role);
                 <Text style={styles.categoryName}>Financial Advisory</Text>
                 <View style={styles.infoPill}>
                   <Text style={styles.infoText}>
-                    {filteredDocuments.length} Files
+                    {(documentCategoriesData?.documents || []).length} Files
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -615,10 +630,14 @@ const role = useSelector((state) => state.auth.role);
                   />
                 </View>
                 <Text style={styles.categoryName}>Project Blueprints</Text>
-                <Text style={styles.fileCount}>All Projects</Text>
+                <View style={styles.infoPill}>
+                  <Text style={styles.infoText}>
+                   All Projects
+                  </Text>
+                </View>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.categoryCard}>
+              <TouchableOpacity style={styles.categoryCard} onPress={()=> router.push('/(Dashboard)/AllDocuments/ConsultantReport')}>
                 <View style={[styles.iconBox, { backgroundColor: "#e0e7ff" }]}>
                   <MaterialCommunityIcons
                     name="file-chart-outline"
@@ -629,12 +648,12 @@ const role = useSelector((state) => state.auth.role);
                 <Text style={styles.categoryName}>Consultant Reports</Text>
                 <View style={styles.infoPill}>
                   <Text style={styles.infoText}>
-                    {filteredDocuments.length} Files
+                    {(ConsultantReportData?.documents || []).length} Files
                   </Text>
                 </View>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.categoryCard}>
+              <TouchableOpacity style={styles.categoryCard} onPress={()=> router.push("/(Dashboard)/AllDocuments/Contracts")}>
                 <View style={[styles.iconBox, { backgroundColor: "#ccfbf1" }]}>
                   <MaterialCommunityIcons
                     name="file-sign"
@@ -645,12 +664,12 @@ const role = useSelector((state) => state.auth.role);
                 <Text style={styles.categoryName}>Contracts</Text>
                 <View style={styles.infoPill}>
                   <Text style={styles.infoText}>
-                    {filteredDocuments.length} Files
+                    {(ContractsData?.documents || []).length} Files
                   </Text>
                 </View>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.categoryCard}>
+              <TouchableOpacity style={styles.categoryCard} onPress={()=> router.push("/(Dashboard)/AllDocuments/HRRecords")}>
                 <View style={[styles.iconBox, { backgroundColor: "#f3e8ff" }]}>
                   <MaterialCommunityIcons
                     name="account-group-outline"
@@ -661,12 +680,12 @@ const role = useSelector((state) => state.auth.role);
                 <Text style={styles.categoryName}>HR Records</Text>
                 <View style={styles.infoPill}>
                   <Text style={styles.infoText}>
-                    {filteredDocuments.length} Files
+                    {(HRRecordsData?.documents || []).length} Files
                   </Text>
                 </View>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.categoryCard}>
+              <TouchableOpacity style={styles.categoryCard} onPress={()=> router.push("/(Dashboard)/AllDocuments/OtherDocuments")}>
                 <View style={[styles.iconBox, { backgroundColor: "#f3f4f6" }]}>
                   <MaterialCommunityIcons
                     name="folder-outline"
@@ -677,7 +696,7 @@ const role = useSelector((state) => state.auth.role);
                 <Text style={styles.categoryName}>Other Documents</Text>
                 <View style={styles.infoPill}>
                   <Text style={styles.infoText}>
-                    {filteredDocuments.length} Files
+                    {(OtherDocumentsData?.documents || []).length} Files
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -904,16 +923,19 @@ const role = useSelector((state) => state.auth.role);
 
             <TouchableOpacity
               style={styles.actionRow}
-              onPress={() => {
-                handleShareDocument(actionItem);
-              }}
+              // onPress={() => {
+              //   handleShareDocument(actionItem);
+              // }}
+              onPress={()=> router.push("/(Dashboard)/AllDocuments/ShareDocumentWithOTP")}
             >
               <Ionicons name="lock-closed" size={22} color="#334155" />
               <Text style={styles.actionText}>Secure Share</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.actionRow}
+              style={[styles.actionRow, role === "user" && styles.disabledButton]}
+              disabled={role === "user"}
+            
               onPress={() => {
                 handleDownloadDocument(actionItem);
               }}
@@ -925,7 +947,8 @@ const role = useSelector((state) => state.auth.role);
             <View style={styles.divider} />
 
             <TouchableOpacity
-              style={styles.actionRow}
+              style={[styles.actionRow, role === "user" && styles.disabledButton]}
+              disabled={role === "user"}
               onPress={() => {
                 /* rename */
               }}
@@ -937,7 +960,8 @@ const role = useSelector((state) => state.auth.role);
             <View style={styles.divider} />
 
             <TouchableOpacity
-              style={styles.actionRow}
+              style={[styles.actionRow, role === "user" && styles.disabledButton]}
+              disabled={role === "user"}
               onPress={() => {
                 handleDeleteDocument(actionItem);
               }}
@@ -980,6 +1004,9 @@ const styles = StyleSheet.create({
   infoPill: {
     marginTop: 6,
     alignSelf: "flex-start",
+  },
+    disabledButton: {
+    opacity: 0.5,
   },
 
   scrollContent: {
@@ -1074,12 +1101,10 @@ const styles = StyleSheet.create({
     marginRight: 16,
     alignItems: "center",
     marginRight: 16,
-
   },
   notification: {
     position: "relative",
     marginLeft: 12,
-    
   },
   encryptedBadge: {
     flexDirection: "row",
@@ -1393,5 +1418,4 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontWeight: "500",
   },
-
 });

@@ -27,6 +27,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useEffect } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 
@@ -758,12 +759,12 @@ useEffect(() => {
       {/* ================= Backed Data of Financial Advisory in FlatList ================= */}
       <SafeAreaView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 120 }}
+        contentContainerStyle={{ paddingBottom: 0 }}
       >
         <FlatList
           data={filteredDocuments}
           keyExtractor={(item) => item._id}
-          contentContainerStyle={{ paddingVertical: 0 }}
+          contentContainerStyle={{ paddingTop: 0, paddingBottom: 80 }}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefreshAll} />
           }
@@ -998,14 +999,15 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     marginHorizontal: 16,
     marginVertical: 4,
-    padding: 15,
+    padding: 5,
     borderRadius: 14,
     shadowColor: "#000",
     shadowOpacity: 0.05,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 3 },
     elevation: 3,
-    marginBottom: 20,
+    marginBottom: 6,
+    marginTop: 5,
   },
   iconWrapper: {
     width: 48,

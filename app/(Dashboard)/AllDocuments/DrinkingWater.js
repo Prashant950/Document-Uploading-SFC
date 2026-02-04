@@ -765,7 +765,7 @@ const DrinkingWater = () => {
         <FlatList
           data={filteredDocuments}
           keyExtractor={(item) => item._id}
-          contentContainerStyle={{ paddingVertical: 0 }}
+          contentContainerStyle={{paddingTop: 0, paddingBottom: 80 }}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefreshAll} />
           }
@@ -989,7 +989,8 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 3 },
     elevation: 3,
-    marginBottom: 20,
+    marginBottom: 6,
+    marginTop: 5,
   },
   iconWrapper: {
     width: 48,

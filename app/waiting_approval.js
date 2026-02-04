@@ -16,7 +16,7 @@ import {
   useSubmitUserProfileMutation,
   useAdminApproveUserMutation,
 } from "../src/services/apiSlice";
-
+import { useCallback, useEffect } from "react";
 const WaitingApproval = () => {
   const router = useRouter();
   const { mobileNumber } = useLocalSearchParams();
@@ -278,7 +278,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    marginTop: 10,
+    marginTop: 30,
+    marginBottom: 20,
   },
   content: {
     marginTop: 20,
@@ -300,6 +301,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 12,
     marginTop: 20,
+   
+    
   },
   input: {
     borderWidth: 1,
@@ -350,6 +353,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
+    marginBottom: 28,
   },
   pillText: {
     fontSize: 13,
@@ -366,6 +370,9 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 24,
     alignItems: "center",
+    marginBottom: 20,
+    marginTop: 10,
+    
   },
 
   iconCircle: {
@@ -395,6 +402,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 12,
     marginTop: 20,
+    marginBottom: 0,
   },
 
   pill: {
@@ -405,6 +413,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
+    marginBottom: 60,
   },
 
   pillText: {
@@ -432,6 +441,7 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     fontSize: 13,
     marginBottom: 10,
+    
   },
   button: {
     backgroundColor: "#1d4ed8",
@@ -447,16 +457,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  footerText: {
-    textAlign: "center",
-    color: "#6b7280",
-    fontSize: 13,
-    marginBottom: 10,
-  },
-  footerText: {
-    textAlign: "center",
-    color: "#6b7280",
-    fontSize: 13,
-    marginBottom: 10,
-  },
+ 
+  
 });

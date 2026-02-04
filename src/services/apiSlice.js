@@ -201,49 +201,53 @@ export const apiSlice = createApi({
     }),
 
     SubmitUserProfile: builder.mutation({
-  query: (data) => ({
-    url: "user/UserProfile",
-    method: "POST",
-    body:data,
-  }),
-}),
+      query: (data) => ({
+        url: "user/UserProfile",
+        method: "POST",
+        body: data,
+      }),
+    }),
 
-getUserStatus: builder.query({
-  query: () => ({
-    url: "user/me/status",
-    method: "GET",
-  }),
-}),
-UserCreatePin: builder.mutation({
-  query: (data) => ({
-    url: "user/user-create-pin",
-    method: "POST",
-    body: data,
-  }),}),
-UserConfirmPin: builder.mutation({
-  query: (data) => ({
-    url: "user/user-confirm-pin",
-    method: "POST",
-    body: data,
-  }),
-}),
-UserForgotPin: builder.mutation({
-  query: () => ({
-    url: "user/user-forgot-pin",
-    method: "POST",
-  }),
-}),
-GetUserName: builder.query({
-  query: () => ({
-    url: "user/ProfileName",
-    method: "GET",
-  }),
-}),
+    getUserStatus: builder.query({
+      query: () => ({
+        url: "user/me/status",
+        method: "GET",
+      }),
+    }),
 
-
-
+    GetUserProfileStatus: builder.query({
+      query: (mobileNumber) => ({
+        url: `user/profile-status/${mobileNumber}`,
+        method: "GET",
+      }),
+    }),
+    UserCreatePin: builder.mutation({
+      query: (data) => ({
+        url: "user/user-create-pin",
+        method: "POST",
+        body: data,
+      }),
+    }),
+    UserConfirmPin: builder.mutation({
+      query: (data) => ({
+        url: "user/user-confirm-pin",
+        method: "POST",
+        body: data,
+      }),
+    }),
+    UserForgotPin: builder.mutation({
+      query: () => ({
+        url: "user/user-forgot-pin",
+        method: "POST",
+      }),
+    }),
+    GetUserName: builder.query({
+      query: () => ({
+        url: "user/ProfileName",
+        method: "GET",
+      }),
+    }),
   }),
-
 });
 
 export const {
@@ -257,7 +261,6 @@ export const {
   useSubmitUserProfileMutation,
   useGetUserProfileStatusQuery,
 
-
   useDocumentViewQuery,
   useUserForgotPinMutation,
 
@@ -268,8 +271,6 @@ export const {
   useAdminRenameDocumentMutation,
 
   useUploadDocumentMutation,
-
-
 
   useFetchDocumentsQuery,
   useDeleteDocumentMutation,
@@ -285,5 +286,4 @@ export const {
   useUserCreatePinMutation,
   useUserConfirmPinMutation,
   useGetUserNameQuery,
-
 } = apiSlice;

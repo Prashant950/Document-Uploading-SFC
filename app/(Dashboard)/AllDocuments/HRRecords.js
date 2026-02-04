@@ -8,11 +8,10 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import * as IntentLauncher from "expo-intent-launcher";
-import { useCallback, useState } from "react";
 import * as MediaLibrary from "expo-media-library";
 import * as ScreenCapture from "expo-screen-capture";
 import * as Sharing from "expo-sharing";
-
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -28,41 +27,43 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useEffect } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 
 import {
+  useAdminDocumentDeleteMutation,
   useAdminUploadDocumentMutation,
-  useGetDocumentWithCategoriesQuery,useAdminDocumentDeleteMutation,
+  useGetDocumentWithCategoriesQuery,
 } from "../../../src/services/apiSlice";
+
 import { useSelector } from "react-redux";
 import { BACKEND_IP, BACKEND_PORT } from "../../../src/config";
 const API_BASE_URL = `http://${BACKEND_IP}:${BACKEND_PORT}/api`;
 
-const Storm_Water = () => {
-  const role = useSelector((state) => state.auth.role);
-  
-
+const HRRecords = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [docName, setDocName] = useState("");
-  const [docKey, setDocKey] = useState("FINANCIAL_ADVISORY"); // default document type
+  const [docKey, setDocKey] = useState("HR_RECORD"); // default document type
   const [files, setFiles] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [actionVisible, setActionVisible] = useState(false);
   const [actionItem, setActionItem] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
-   const [loadingAction, setLoadingAction] = useState(null);
+  const [loadingAction, setLoadingAction] = useState(null);
 
   const [adminUploadDocument, { isLoadingDocument, error }] =
     useAdminUploadDocumentMutation();
-  const { data: documentCategoriesData, refetch } =
-    useGetDocumentWithCategoriesQuery({ docKey: "FINANCIAL_ADVISORY" });
-    const [deleteDocument] = useAdminDocumentDeleteMutation({});
+  const [deleteDocument] = useAdminDocumentDeleteMutation({});
 
+  const { data: documentCategoriesData, refetch } =
+    useGetDocumentWithCategoriesQuery({ docKey: "HR_RECORD" });
 
   // download progress tracker in toast
   let lastProgress = 0;
+
+  const role = useSelector((state) => state.auth.role);
 
   // 🔒 Prevent Screenshots
   useFocusEffect(
@@ -89,6 +90,7 @@ const Storm_Water = () => {
       };
     }, []),
   );
+
 
   // helper to format date strings safely
   const formatDate = (val) => {
@@ -207,14 +209,17 @@ const Storm_Water = () => {
       const formData = new FormData();
 
       formData.append("docName", docName.trim());
-      formData.append("docKey", docKey || "FINANCIAL_ADVISORY");
+      formData.append("docKey", docKey || "HR_RECORD");
 
       files.forEach((f, index) => {
         if (!f?.uri) return;
         formData.append("files", {
           uri: f.uri,
-          name: f.name || `file_${index}`,
-          type: f.type || f.mimeType || "application/octet-stream",
+          // name: f.name || `file_${index}`,
+          // type: f.type || f.mimeType || "application/octet-stream",
+
+          name: f.name || `document_${index}.pdf`,
+          type: f.mimeType || "application/pdf", // 🔥 KEY FIX
         });
       });
 
@@ -228,7 +233,7 @@ const Storm_Water = () => {
 
       setFiles([]);
       setDocName("");
-      setDocKey("FINANCIAL_ADVISORY");
+      setDocKey("HR_RECORD");
       setModalVisible(false);
     } catch (err) {
       console.log("❌ Upload error FULL:", err);
@@ -285,8 +290,7 @@ const Storm_Water = () => {
         }
       }
 
-      const action = IntentLauncher.ACTION_VIEW || "android.intent.action.VIEW";
-      await IntentLauncher.startActivityAsync(action, {
+      await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
         data: launchUri,
         flags: 1,
         type: doc.contentType || "application/octet-stream",
@@ -299,7 +303,7 @@ const Storm_Water = () => {
       });
     }
   };
-  // Share Documents
+  // Shared Documents
   const handleShareDocument = async (doc) => {
     try {
       if (!doc?._id) {
@@ -487,28 +491,6 @@ const Storm_Water = () => {
     }
   };
 
-  // const handleRenameDocument = async (doc) => {
-  //   try {
-  //     if (!doc?._id) {
-  //       Toast.show({ type: "error", text1: "Invalid document" });
-  //       return;
-  //     }
-
-  //     setLoadingAction({ type: "rename", id: doc._id });
-
-  //     // Rename logic here
-
-  //     setLoadingAction(null);
-  //   } catch (error) {
-  //     console.log("❌ Rename error:", error);
-  //     Toast.show({
-  //       type: "error",
-  //       text1: "Rename failed",
-  //     });
-  //     setLoadingAction(null);
-  //   }
-  // };
-
   return (
     <SafeAreaView style={styles.safe}>
       {/* Search */}
@@ -533,15 +515,15 @@ const Storm_Water = () => {
         <Text style={styles.infoText}>{filteredDocuments.length} Files</Text>
       </View>
 
-      {/* Add Document btn */}
+      {/* Add Document btn in Conditional */}
       {role !== "user" && (
-              <TouchableOpacity
-                style={styles.fab}
-                onPress={() => setModalVisible(true)}
-              >
-                <Ionicons name="add" size={28} color="#fff" />
-              </TouchableOpacity>
-            )}
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => setModalVisible(true)}
+        >
+          <Ionicons name="add" size={28} color="#fff" />
+        </TouchableOpacity>
+      )}
 
       {/* ================= MODAL Document Upload ================= */}
       <Modal
@@ -718,37 +700,72 @@ const Storm_Water = () => {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.actionRow}
+              style={[
+                styles.actionRow,
+                role === "user" && styles.disabledButton,
+              ]}
+              disabled={role === "user"}
               onPress={() => {
                 handleDownloadDocument(actionItem);
               }}
             >
-              <Ionicons name="download-outline" size={22} color="#334155" />
-              <Text style={styles.actionText}>Download to Vault</Text>
+              <Ionicons
+                name="download-outline"
+                size={22}
+                color={role === "user" ? "#94a3b8" : "#334155"}
+              />
+              <Text
+                style={[
+                  styles.actionText,
+                  role === "user" && styles.disabledText,
+                ]}
+              >
+                Download
+              </Text>
             </TouchableOpacity>
 
             <View style={styles.divider} />
 
             <TouchableOpacity
-              style={styles.actionRow}
+              style={[
+                styles.actionRow,
+                role === "user" && styles.disabledButton,
+              ]}
+              disabled={role === "user"}
               onPress={() => {
                 /* rename */
               }}
             >
               <Ionicons name="pencil-outline" size={22} color="#334155" />
-              <Text style={styles.actionText}>Rename File</Text>
+              <Text
+                style={[
+                  styles.actionText,
+                  role === "user" && styles.disabledText,
+                ]}
+              >
+                Rename File
+              </Text>
             </TouchableOpacity>
 
             <View style={styles.divider} />
 
             <TouchableOpacity
-              style={styles.actionRow}
+              style={[
+                styles.actionRow,
+                role === "user" && styles.disabledButton,
+              ]}
+              disabled={role === "user"}
               onPress={() => {
                 handleDeleteDocument(actionItem);
               }}
             >
               <Ionicons name="trash-outline" size={22} color="#ef4444" />
-              <Text style={[styles.actionText, { color: "#ef4444" }]}>
+              <Text
+                style={[
+                  styles.actionText,
+                  role === "user" && styles.disabledText,
+                ]}
+              >
                 Delete
               </Text>
             </TouchableOpacity>
@@ -825,7 +842,7 @@ const Storm_Water = () => {
   );
 };
 
-export default Storm_Water;
+export default HRRecords;
 
 /* ================= STYLES ================= */
 const styles = StyleSheet.create({
@@ -933,6 +950,24 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     marginBottom: 10,
   },
+  actionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+  },
+
+  disabledButton: {
+    opacity: 0.5,
+  },
+
+  actionText: {
+    marginLeft: 8,
+    color: "#334155",
+  },
+
+  disabledText: {
+    color: "#94a3b8",
+  },
 
   modalHeader: {
     flexDirection: "row",
@@ -981,7 +1016,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     marginHorizontal: 16,
     marginVertical: 4,
-    padding: 15,
+    padding: 5,
     borderRadius: 14,
     shadowColor: "#000",
     shadowOpacity: 0.05,

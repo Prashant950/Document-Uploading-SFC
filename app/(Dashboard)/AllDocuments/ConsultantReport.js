@@ -2136,6 +2136,8 @@ import * as MediaLibrary from "expo-media-library";
 import * as ScreenCapture from "expo-screen-capture";
 import * as Sharing from "expo-sharing";
 import { useEffect, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
+
 import {
   ActivityIndicator,
   Alert,
@@ -2151,6 +2153,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useCallback, useRef } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 
@@ -2164,10 +2167,10 @@ import { useSelector } from "react-redux";
 import { BACKEND_IP, BACKEND_PORT } from "../../../src/config";
 const API_BASE_URL = `http://${BACKEND_IP}:${BACKEND_PORT}/api`;
 
-const ClientStrategies = () => {
+const ConsultantReport = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [docName, setDocName] = useState("");
-  const [docKey, setDocKey] = useState("CLIENT_STRATEGY"); // default document type
+  const [docKey, setDocKey] = useState("CONSULTANT_REPORT"); // default document type
   const [files, setFiles] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -2182,7 +2185,7 @@ const ClientStrategies = () => {
 
   const { data: documentCategoriesData, refetch } =
     useGetDocumentWithCategoriesQuery(
-      { docKey: "CLIENT_STRATEGY" },
+      { docKey: "CONSULTANT_REPORT" },
       { refetchOnMountOrArgChange: true },
     );
 
@@ -2192,13 +2195,30 @@ const ClientStrategies = () => {
   const role = useSelector((state) => state.auth.role);
 
   // 🔒 Prevent Screenshots
-  useEffect(() => {
-    ScreenCapture.preventScreenCaptureAsync();
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
 
-    return () => {
-      ScreenCapture.allowScreenCaptureAsync();
-    };
-  }, []);
+      const enableSecure = async () => {
+        try {
+          if (Platform.OS === "android") {
+            await ScreenCapture.preventScreenCaptureAsync();
+          }
+        } catch (e) {
+          console.log("❌ Screen capture prevent error:", e);
+        }
+      };
+
+      enableSecure();
+
+      return () => {
+        if (isActive) {
+          ScreenCapture.allowScreenCaptureAsync().catch(() => {});
+          isActive = false;
+        }
+      };
+    }, []),
+  );
 
   // helper to format date strings safely
   const formatDate = (val) => {
@@ -2317,7 +2337,7 @@ const ClientStrategies = () => {
       const formData = new FormData();
 
       formData.append("docName", docName.trim());
-      formData.append("docKey", docKey || "CLIENT_STRATEGY");
+      formData.append("docKey", docKey || "CONSULTANT_REPORT");
 
       files.forEach((f, index) => {
         if (!f?.uri) return;
@@ -2341,7 +2361,7 @@ const ClientStrategies = () => {
 
       setFiles([]);
       setDocName("");
-      setDocKey("CLIENT_STRATEGY");
+      setDocKey("CONSULTANT_REPORT");
       setModalVisible(false);
 
       // 🔄 Refresh data to show newly uploaded documents
@@ -2953,7 +2973,7 @@ const ClientStrategies = () => {
   );
 };
 
-export default ClientStrategies;
+export default ConsultantReport;
 
 /* ================= STYLES ================= */
 const styles = StyleSheet.create({

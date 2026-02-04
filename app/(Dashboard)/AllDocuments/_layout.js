@@ -185,6 +185,86 @@ const _layout = () => {
           ),
         }}
       />
+<Stack.Screen
+        name="ConsultantReport"
+        options={{
+          headerShown: true,
+          title: "Consultant Report",
+          headerLeft: () => (
+            <Pressable
+              onPress={() => router.replace("/(Dashboard)")}
+              style={{ paddingHorizontal: 12 }}
+            >
+              <Ionicons name="arrow-back" size={24} color="#fff" />
+            </Pressable>
+          ),
+        }}
+      />    
+    <Stack.Screen
+        name="Contracts"
+        options={{
+          headerShown: true,
+          title: "Contracts & Agreements",
+          headerLeft: () => (
+            <Pressable
+              onPress={() => router.replace("/(Dashboard)")}
+              style={{ paddingHorizontal: 12 }}
+            >
+              <Ionicons name="arrow-back" size={24} color="#fff" />
+            </Pressable>
+          ),
+        }}
+      /> 
+    <Stack.Screen
+        name="HRRecords"
+        options={{
+          headerShown: true,
+          title: "HR Records",
+          headerLeft: () => (
+            <Pressable
+              onPress={() => router.replace("/(Dashboard)")}
+              style={{ paddingHorizontal: 12 }}
+            >
+              <Ionicons name="arrow-back" size={24} color="#fff" />
+            </Pressable>
+          )
+        }} 
+      />
+    <Stack.Screen
+        name="OtherDocuments"
+        options={{
+          headerShown: true,
+          title: "Other Documents",
+          headerLeft: () => (
+            <Pressable  
+              onPress={() => router.replace("/(Dashboard)")}
+              style={{ paddingHorizontal: 12 }}
+            >
+              <Ionicons name="arrow-back" size={24} color="#fff" />
+            </Pressable>
+          )
+
+        }}
+      />
+  <Stack.Screen
+        name="ShareDocumentWithOTP"
+        options={{
+          headerShown: true,
+          title: "Share Document With OTP",
+          headerLeft: () => (
+            <Pressable
+              onPress={() => router.replace("/(Dashboard)")}
+              style={{ paddingHorizontal: 12 }}
+            >
+              <Ionicons name="arrow-back" size={24} color="#fff" />
+            </Pressable>
+          ),
+        }}
+      />
+
+
+
+
     </Stack>
     // </Provider>
   );
