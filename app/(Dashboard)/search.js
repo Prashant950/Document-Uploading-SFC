@@ -11,11 +11,15 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import Toast from "react-native-toast-message";
+import {useGetDocumentWithCategoriesQuery} from "../../src/services/apiSlice";
 
 const Search = () => {
   const [filterVisible, setFilterVisible] = useState(false);
   const [category, setCategory] = useState(null);
   const [subCategory, setSubCategory] = useState(null);
+
+const { data: documentsData, error, isLoading } = useGetDocumentWithCategoriesQuery({});
 
   return (
     <SafeAreaView style={styles.safe}>
