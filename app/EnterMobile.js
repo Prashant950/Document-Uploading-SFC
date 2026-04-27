@@ -8,7 +8,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
@@ -20,6 +20,7 @@ const EnterMobile = () => {
   const inputRef = useRef(null);
 
   const [requestOTP, { isLoading }] = useRequestOTPMutation();
+  const[iscontinue,setiscontinue]=useState(false);
 
   const handleMobileChange = (value) => {
     // Only numbers
@@ -43,6 +44,7 @@ const EnterMobile = () => {
     }
 
     try {
+      setiscontinue(true);
       const data = await requestOTP({ mobileNumber: mobileNumber }).unwrap();
       console.log("OTP API RESPONSE:", data);
       Toast.show({
@@ -123,7 +125,10 @@ const EnterMobile = () => {
           disabled={!isValid}
           onPress={handleContinue}
         >
+          {iscontinue ? (<ActivityIndicator color="#FFFFFF" />) :
+          (
           <Text style={styles.buttonText}>CONTINUE ➜</Text>
+         )}
         </TouchableOpacity>
 
         {/* Footer */}

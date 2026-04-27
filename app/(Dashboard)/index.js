@@ -1,3 +1,4 @@
+import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system/legacy";
@@ -7,6 +8,7 @@ import { useRouter } from "expo-router";
 import * as ScreenCapture from "expo-screen-capture";
 import * as Sharing from "expo-sharing";
 import { useCallback, useState } from "react";
+import { StatusBar } from "expo-status-bar";
 import {
   Alert,
   FlatList,
@@ -65,15 +67,15 @@ const Index = () => {
   const { data: ConsultantReportData } = useGetDocumentWithCategoriesQuery({
     docKey: "CONSULTANT_REPORT",
   });
-const {data : ContractsData} = useGetDocumentWithCategoriesQuery({
-  docKey : "CONTRACT"
-});
-const {data: HRRecordsData} = useGetDocumentWithCategoriesQuery({
-  docKey : "HR_RECORD"
-});
-const {data: OtherDocumentsData} = useGetDocumentWithCategoriesQuery({
-  docKey : "OTHER"
-});
+  const { data: ContractsData } = useGetDocumentWithCategoriesQuery({
+    docKey: "CONTRACT",
+  });
+  const { data: HRRecordsData } = useGetDocumentWithCategoriesQuery({
+    docKey: "HR_RECORD",
+  });
+  const { data: OtherDocumentsData } = useGetDocumentWithCategoriesQuery({
+    docKey: "OTHER",
+  });
 
   const redirectclientStrategies = () => {
     router.push("/(Dashboard)/AllDocuments/ClientStrategies");
@@ -480,6 +482,7 @@ const {data: OtherDocumentsData} = useGetDocumentWithCategoriesQuery({
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <StatusBar style="dark" />
       <FlatList
         data={searchQuery.length === 0 ? recentDocuments : searchResults}
         keyExtractor={(item) => item.id?.toString()}
@@ -555,7 +558,8 @@ const {data: OtherDocumentsData} = useGetDocumentWithCategoriesQuery({
                     }
                   }}
                 >
-                  <Ionicons name="power" size={22} color="#ef4444" />
+                  <MaterialIcons name="logout" size={24} color="#ef4444" />
+                  {/* <Ionicons name="logout" size={24} color="#ef4444" /> */}
                 </TouchableOpacity>
               </View>
             </View>
@@ -631,13 +635,16 @@ const {data: OtherDocumentsData} = useGetDocumentWithCategoriesQuery({
                 </View>
                 <Text style={styles.categoryName}>Project Blueprints</Text>
                 <View style={styles.infoPill}>
-                  <Text style={styles.infoText}>
-                   All Projects
-                  </Text>
+                  <Text style={styles.infoText}>All Projects</Text>
                 </View>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.categoryCard} onPress={()=> router.push('/(Dashboard)/AllDocuments/ConsultantReport')}>
+              <TouchableOpacity
+                style={styles.categoryCard}
+                onPress={() =>
+                  router.push("/(Dashboard)/AllDocuments/ConsultantReport")
+                }
+              >
                 <View style={[styles.iconBox, { backgroundColor: "#e0e7ff" }]}>
                   <MaterialCommunityIcons
                     name="file-chart-outline"
@@ -653,7 +660,12 @@ const {data: OtherDocumentsData} = useGetDocumentWithCategoriesQuery({
                 </View>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.categoryCard} onPress={()=> router.push("/(Dashboard)/AllDocuments/Contracts")}>
+              <TouchableOpacity
+                style={styles.categoryCard}
+                onPress={() =>
+                  router.push("/(Dashboard)/AllDocuments/Contracts")
+                }
+              >
                 <View style={[styles.iconBox, { backgroundColor: "#ccfbf1" }]}>
                   <MaterialCommunityIcons
                     name="file-sign"
@@ -669,7 +681,12 @@ const {data: OtherDocumentsData} = useGetDocumentWithCategoriesQuery({
                 </View>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.categoryCard} onPress={()=> router.push("/(Dashboard)/AllDocuments/HRRecords")}>
+              <TouchableOpacity
+                style={styles.categoryCard}
+                onPress={() =>
+                  router.push("/(Dashboard)/AllDocuments/HRRecords")
+                }
+              >
                 <View style={[styles.iconBox, { backgroundColor: "#f3e8ff" }]}>
                   <MaterialCommunityIcons
                     name="account-group-outline"
@@ -685,7 +702,12 @@ const {data: OtherDocumentsData} = useGetDocumentWithCategoriesQuery({
                 </View>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.categoryCard} onPress={()=> router.push("/(Dashboard)/AllDocuments/OtherDocuments")}>
+              <TouchableOpacity
+                style={styles.categoryCard}
+                onPress={() =>
+                  router.push("/(Dashboard)/AllDocuments/OtherDocuments")
+                }
+              >
                 <View style={[styles.iconBox, { backgroundColor: "#f3f4f6" }]}>
                   <MaterialCommunityIcons
                     name="folder-outline"
@@ -926,16 +948,20 @@ const {data: OtherDocumentsData} = useGetDocumentWithCategoriesQuery({
               // onPress={() => {
               //   handleShareDocument(actionItem);
               // }}
-              onPress={()=> router.push("/(Dashboard)/AllDocuments/ShareDocumentWithOTP")}
+              onPress={() =>
+                router.push("/(Dashboard)/AllDocuments/ShareDocumentWithOTP")
+              }
             >
               <Ionicons name="lock-closed" size={22} color="#334155" />
               <Text style={styles.actionText}>Secure Share</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.actionRow, role === "user" && styles.disabledButton]}
+              style={[
+                styles.actionRow,
+                role === "user" && styles.disabledButton,
+              ]}
               disabled={role === "user"}
-            
               onPress={() => {
                 handleDownloadDocument(actionItem);
               }}
@@ -947,7 +973,10 @@ const {data: OtherDocumentsData} = useGetDocumentWithCategoriesQuery({
             <View style={styles.divider} />
 
             <TouchableOpacity
-              style={[styles.actionRow, role === "user" && styles.disabledButton]}
+              style={[
+                styles.actionRow,
+                role === "user" && styles.disabledButton,
+              ]}
               disabled={role === "user"}
               onPress={() => {
                 /* rename */
@@ -960,7 +989,10 @@ const {data: OtherDocumentsData} = useGetDocumentWithCategoriesQuery({
             <View style={styles.divider} />
 
             <TouchableOpacity
-              style={[styles.actionRow, role === "user" && styles.disabledButton]}
+              style={[
+                styles.actionRow,
+                role === "user" && styles.disabledButton,
+              ]}
               disabled={role === "user"}
               onPress={() => {
                 handleDeleteDocument(actionItem);
@@ -1005,7 +1037,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
     alignSelf: "flex-start",
   },
-    disabledButton: {
+  disabledButton: {
     opacity: 0.5,
   },
 
@@ -1014,11 +1046,7 @@ const styles = StyleSheet.create({
     paddingBottom: 30,
     topmargin: 16,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    marginBottom: 12,
-  },
+  
   /* Header */
   header: {
     flexDirection: "row",
@@ -1099,8 +1127,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     marginRight: 16,
-    alignItems: "center",
-    marginRight: 16,
+
   },
   notification: {
     position: "relative",
@@ -1146,9 +1173,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: "#16a34a",
   },
-  notification: {
-    position: "relative",
-  },
+
   notificationDot: {
     position: "absolute",
     top: 0,
@@ -1222,7 +1247,7 @@ const styles = StyleSheet.create({
   actionRow: {
     flexDirection: "row",
     marginTop: 16,
-    flexDirection: "row",
+
     alignItems: "center",
     paddingVertical: 14,
   },
@@ -1372,50 +1397,5 @@ const styles = StyleSheet.create({
     top: 12,
     right: 12,
     zIndex: 10,
-  },
-  docMeta: {
-    fontSize: 13,
-    color: "#6b7280",
-    marginTop: 2,
-  },
-
-  emptyDocText: {
-    fontSize: 16,
-    color: "#6b7280",
-    marginTop: 12,
-  },
-  modalClose: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    zIndex: 10,
-  },
-  docMeta: {
-    fontSize: 13,
-    color: "#6b7280",
-    marginTop: 2,
-  },
-  noDataText: {
-    fontSize: 14,
-    color: "#6b7280",
-    textAlign: "center",
-    fontWeight: "500",
-  },
-  emptyDocText: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    zIndex: 10,
-  },
-  docMeta: {
-    fontSize: 13,
-    color: "#6b7280",
-    marginTop: 2,
-  },
-  noDataText: {
-    fontSize: 14,
-    color: "#6b7280",
-    textAlign: "center",
-    fontWeight: "500",
   },
 });

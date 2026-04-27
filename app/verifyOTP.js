@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
+import { StatusBar } from "expo-status-bar";
 import {
   Animated,Image,
   Keyboard,
@@ -9,7 +10,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View,ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
@@ -20,7 +21,7 @@ import {
   useVerifyOTPMutation,
 } from "../src/services/apiSlice";
 
-const verifyOTP = () => {
+const VerifyOTP = () => {
   const router = useRouter();
   const dispatch = useDispatch();
   const { mobileNumber: paramMobileNumber } = useLocalSearchParams();
@@ -31,6 +32,7 @@ const verifyOTP = () => {
   const [otp, setOtp] = useState(["", "", "", ""]);
   const [timer, setTimer] = useState(45);
   const [error, setError] = useState("");
+  const[isverifying,setisverifying]=useState(false);
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const inputs = useRef([]);
 
@@ -111,6 +113,7 @@ const verifyOTP = () => {
     }
 
     try {
+      setisverifying(true);
       const response = await Verifyotp({
         otp: enteredOtp,
         mobileNumber,
@@ -222,6 +225,7 @@ const verifyOTP = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.container}>
         {/* LOGO */}
         <View style={styles.logo}>
@@ -285,14 +289,19 @@ const verifyOTP = () => {
 
         {/* VERIFY BUTTON */}
         <TouchableOpacity style={styles.button} onPress={VERIFYOTP}>
-          <Text style={styles.buttonText}>VERIFY & SECURE ACCESS →</Text>
+          {isverifying ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+             <Text style={styles.buttonText}>VERIFY & SECURE ACCESS →</Text>)
+            }
+         
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
 };
 
-export default verifyOTP;
+export default VerifyOTP;
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -366,7 +375,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "600",
     backgroundColor: "#FFFFFF",
-    borderWidth: 1,
   },
 
   timerWrapper: {
@@ -425,19 +433,6 @@ const styles = StyleSheet.create({
     color: "#CBD5E1",
   },
 
-  version: {
-    marginTop: 10,
-    fontSize: 11,
-    color: "#94A3B8",
-  },
-  footerText: {
-    fontSize: 12,
-    color: "#64748B",
-  },
-  sep: {
-    marginHorizontal: 10,
-    color: "#CBD5E1",
-  },
   version: {
     marginTop: 10,
     fontSize: 11,

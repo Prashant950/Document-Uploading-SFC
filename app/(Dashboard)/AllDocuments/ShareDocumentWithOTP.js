@@ -602,10 +602,4 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
-
-  shareDisabledText: {
-    color: "#94A3B8",
-    fontSize: 16,
-    fontWeight: "600",
-  },
 });

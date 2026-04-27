@@ -2165,6 +2165,7 @@ import {
 
 import { useSelector } from "react-redux";
 import { BACKEND_IP, BACKEND_PORT } from "../../../src/config";
+import { ScrollView } from "react-native-web";
 const API_BASE_URL = `http://${BACKEND_IP}:${BACKEND_PORT}/api`;
 
 const ConsultantReport = () => {
@@ -2709,6 +2710,7 @@ const ConsultantReport = () => {
             </TouchableOpacity>
 
             {/* Selected Files List */}
+            <ScrollView style={{ maxHeight: 150, marginBottom: 12 }}>
             {files.length > 0 && (
               <View style={{ marginTop: 12 }}>
                 {files.map((f, idx) => (
@@ -2738,6 +2740,7 @@ const ConsultantReport = () => {
                 ))}
               </View>
             )}
+            </ScrollView>
 
             {/* Upload */}
             <TouchableOpacity
@@ -3238,65 +3241,9 @@ const styles = StyleSheet.create({
     marginTop: 14,
     fontWeight: "600",
   },
-  actionRow: {
-    flexDirection: "row",
-    marginTop: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 14,
-  },
-  actionText: {
-    marginLeft: 12,
-    fontSize: 16,
-    color: "#334155",
-    fontWeight: "600",
-  },
   divider: {
     height: 1,
     backgroundColor: "#E5E7EB",
     marginVertical: 12,
-  },
-  uploadBtn: {
-    backgroundColor: "#2563EB",
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: "center",
-    marginTop: 20,
-    flexDirection: "row",
-    justifyContent: "center",
-  },
-
-  uploadBtnText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 15,
-  },
-
-  cancel: {
-    textAlign: "center",
-    color: "#64748B",
-    marginTop: 14,
-    fontWeight: "600",
-  },
-
-  cancel: {
-    textAlign: "center",
-    color: "#64748B",
-    marginTop: 14,
-    fontWeight: "600",
-  },
-
-  cancel: {
-    textAlign: "center",
-    color: "#64748B",
-    marginTop: 14,
-    fontWeight: "600",
-  },
-
-  cancel: {
-    textAlign: "center",
-    color: "#64748B",
-    marginTop: 14,
-    fontWeight: "600",
   },
 });

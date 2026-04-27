@@ -1075,7 +1075,6 @@ const styles = StyleSheet.create({
   actionRow: {
     flexDirection: "row",
     marginTop: 16,
-    flexDirection: "row",
     alignItems: "center",
     paddingVertical: 14,
   },
@@ -1089,48 +1088,5 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: "#E5E7EB",
     marginVertical: 12,
-  },
-  uploadBtn: {
-    backgroundColor: "#2563EB",
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: "center",
-    marginTop: 20,
-    flexDirection: "row",
-    justifyContent: "center",
-  },
-
-  uploadBtnText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 15,
-  },
-
-  cancel: {
-    textAlign: "center",
-    color: "#64748B",
-    marginTop: 14,
-    fontWeight: "600",
-  },
-
-  cancel: {
-    textAlign: "center",
-    color: "#64748B",
-    marginTop: 14,
-    fontWeight: "600",
-  },
-
-  cancel: {
-    textAlign: "center",
-    color: "#64748B",
-    marginTop: 14,
-    fontWeight: "600",
-  },
-
-  cancel: {
-    textAlign: "center",
-    color: "#64748B",
-    marginTop: 14,
-    fontWeight: "600",
   },
 });

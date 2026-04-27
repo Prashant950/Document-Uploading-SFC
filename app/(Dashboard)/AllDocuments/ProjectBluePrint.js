@@ -445,16 +445,6 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 18,
   },
-
-  iconBox: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-
   fileTitle: {
     fontSize: 15,
     fontWeight: "600",
@@ -619,13 +609,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#0F172A",
   },
-
-  fileMeta: {
-    fontSize: 12,
-    color: "#64748B",
-    marginTop: 2,
-  },
-
   uploadBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -648,131 +631,5 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 15,
     color: "#64748B",
-  },
-
-  sheetOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "flex-end",
-  },
-
-  sheetContainer: {
-    backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 16,
-    paddingBottom: 32,
-    maxHeight: "90%",
-  },
-
-  sheetHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#CBD5E1",
-    alignSelf: "center",
-    marginTop: 8,
-    marginBottom: 16,
-  },
-
-  sheetHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-
-  sheetTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#0F172A",
-  },
-
-  label: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#64748B",
-    marginBottom: 8,
-    marginTop: 16,
-    letterSpacing: 0.5,
-  },
-
-  inputBox: {
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    backgroundColor: "#F8FAFC",
-  },
-
-  fileCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#F0FFFE",
-    borderRadius: 12,
-    padding: 12,
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: "#D0F0EE",
-  },
-
-  fileLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-
-  fileIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: "#EFF6FF",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-
-  fileName: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#0F172A",
-  },
-
-  fileMeta: {
-    fontSize: 12,
-    color: "#64748B",
-    marginTop: 2,
-  },
-  uploadBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#1D7AF3",
-    height: 54,
-    borderRadius: 16,
-    marginTop: 22,
-  },
-
-  uploadBtnText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
-    marginLeft: 8,
-  },
-
-  cancelText: {
-    textAlign: "center",
-    marginTop: 16,
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#0F172A",
-  },
-
-  fileMeta: {
-    fontSize: 12,
-    color: "#64748B",
-    marginTop: 2,
   },
 });

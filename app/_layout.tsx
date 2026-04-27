@@ -5,6 +5,7 @@ import Toast from "react-native-toast-message";
 import { Provider, useDispatch } from "react-redux";
 import { logout, setCredentials } from "../src/features/authSlice";
 import { store } from "../src/store";
+import { StatusBar } from "expo-status-bar";
 
 function HeaderLogoutButton() {
   const dispatch = useDispatch();

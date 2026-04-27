@@ -8,7 +8,6 @@ export default function DashboardLayout() {
   return (
     <>
       <StatusBar style="light" />
-
       <Tabs
         screenOptions={{
           headerShown: false,

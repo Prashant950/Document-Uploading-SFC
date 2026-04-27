@@ -40,7 +40,7 @@ import { BACKEND_IP, BACKEND_PORT } from "../../../src/config";
 import { useSelector } from "react-redux";
 const API_BASE_URL = `http://${BACKEND_IP}:${BACKEND_PORT}/api`;
 
-const used_Water_Management = () => {
+const Used_Water_Management = () => {
   const role = useSelector((state) => state.auth.role);
   
   const [modalVisible, setModalVisible] = useState(false);
@@ -825,7 +825,7 @@ const used_Water_Management = () => {
   );
 };
 
-export default used_Water_Management;
+export default Used_Water_Management;
 
 /* ================= STYLES ================= */
 const styles = StyleSheet.create({
@@ -1075,7 +1075,6 @@ const styles = StyleSheet.create({
   actionRow: {
     flexDirection: "row",
     marginTop: 16,
-    flexDirection: "row",
     alignItems: "center",
     paddingVertical: 14,
   },
@@ -1089,48 +1088,5 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: "#E5E7EB",
     marginVertical: 12,
-  },
-  uploadBtn: {
-    backgroundColor: "#2563EB",
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: "center",
-    marginTop: 20,
-    flexDirection: "row",
-    justifyContent: "center",
-  },
-
-  uploadBtnText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 15,
-  },
-
-  cancel: {
-    textAlign: "center",
-    color: "#64748B",
-    marginTop: 14,
-    fontWeight: "600",
-  },
-
-  cancel: {
-    textAlign: "center",
-    color: "#64748B",
-    marginTop: 14,
-    fontWeight: "600",
-  },
-
-  cancel: {
-    textAlign: "center",
-    color: "#64748B",
-    marginTop: 14,
-    fontWeight: "600",
-  },
-
-  cancel: {
-    textAlign: "center",
-    color: "#64748B",
-    marginTop: 14,
-    fontWeight: "600",
   },
 });

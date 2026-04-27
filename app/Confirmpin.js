@@ -1,8 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import { useRef, useState } from "react";
-import { useSelector } from "react-redux";
+import { useRef, useState,useEffect } from "react";
+import { useSelector,useDispatch } from "react-redux";
 import {
   Alert,
   Keyboard,
@@ -13,14 +13,13 @@ import {
   View,
 } from "react-native";
 import Toast from "react-native-toast-message";
-import { useDispatch } from "react-redux";
-import { useEffect } from "react";
+import { StatusBar } from "expo-status-bar";
 import {
   useAdminconfirmPinMutation,
   useAdminforgotPinMutation,useUserConfirmPinMutation,useUserForgotPinMutation,
 } from "../src/services/apiSlice";
 
-const confirmpinscreen = () => {
+const Confirmpinscreen = () => {
   const router = useRouter();
   const dispatch = useDispatch();
 
@@ -164,6 +163,7 @@ const handleConfirm = async () => {
 
   return (
     <View style={styles.container}>
+      <StatusBar style="dark" />
       {/* Center Content */}
       <View style={styles.content}>
         <View style={styles.iconWrapper}>
@@ -187,6 +187,8 @@ const handleConfirm = async () => {
               ]}
               value={digit}
               keyboardType="number-pad"
+              inputMode="numeric"
+              pattern="[0-9]*" 
               maxLength={1}
               secureTextEntry={!showPin}
               onChangeText={(v) => handleChange(v, index)}
@@ -215,7 +217,7 @@ const handleConfirm = async () => {
   );
 };
 
-export default confirmpinscreen;
+export default Confirmpinscreen;
 
 const styles = StyleSheet.create({
   container: {
@@ -295,10 +297,6 @@ const styles = StyleSheet.create({
   RestPin: {
     color: "#1976d2",
     fontSize: 16,
-    fontWeight: "600",
-    marginTop: 20,
-  },
-  RestPin1: {
     fontWeight: "600",
     marginTop: 20,
   },
