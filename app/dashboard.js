@@ -1,11 +1,22 @@
-import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system/legacy";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+//import * as FileSystem from "expo-file-system";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as IntentLauncher from "expo-intent-launcher";
+import * as MediaLibrary from "expo-media-library";
+import * as Sharing from "expo-sharing";
+import { useRef } from "react";
+import { RefreshControl } from "react-native";
 import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Image,
   Modal,
+  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -14,8 +25,23 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
+import Ionicons from "react-native-vector-icons/Ionicons";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import { useUploadDocumentMutation } from "../src/services/apiSlice";
+//import {WebView} from "react-native-webview";
+import JSZip from "jszip";
+
+import {
+  useDeleteDocumentMutation,
+  useFetchDocumentsQuery,
+  useLazyDownloadDocumentQuery,
+  useLazyShareDocumentQuery,
+  useLazyViewDocumentQuery,
+  useUploadDocumentMutation,
+} from "../src/services/apiSlice";
+
+import { BACKEND_IP, BACKEND_PORT } from "../src/config";
+
+const BASE_URL = `http://${BACKEND_IP}:${BACKEND_PORT}/api`;
 
 const UploadDocumentsScreen = () => {
   const router = useRouter();
@@ -23,266 +49,1353 @@ const UploadDocumentsScreen = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [docName, setDocName] = useState("");
   const [file, setFile] = useState(null);
-  const [filePath, setfilePath] = useState(null);
+  const [viewUri, setViewUri] = useState(null);
+  const [viewType, setViewType] = useState(null);
+  const [viewVisible, setViewVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [docs, setDocs] = useState({});
+  const [files, setFiles] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const [uploadDocument, { isLoading, error }] = useUploadDocumentMutation();
+  // Prevent duplicate manual uploads
+  const [isManualUploading, setIsManualUploading] = useState(false);
+  // Global per-action loading state: { type: 'view'|'download'|'share'|'delete'|'upload' | null, id: docId or docKey }
+  const [loadingAction, setLoadingAction] = useState({ type: null, id: null });
 
-  const handleModal = () => {
-    setModalVisible(!modalVisible);
+  // Group modal state to show multiple files uploaded together
+  const [groupModalVisible, setGroupModalVisible] = useState(false);
+  const [groupFilesList, setGroupFilesList] = useState([]);
+  const [groupTitle, setGroupTitle] = useState("");
+  const manualUploadingRef = useRef(false);
+
+  // Preview state for group modal
+  const [groupPreviewUri, setGroupPreviewUri] = useState(null);
+  const [groupPreviewType, setGroupPreviewType] = useState(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+
+  const [uploadDocument, { error }] = useUploadDocumentMutation();
+  const {
+    data: documents = [],
+    refetch,
+    isLoading,
+    isError,
+  } = useFetchDocumentsQuery();
+  const [
+    deleteDocument,
+    { isLoading: isLoadingDelete, isError: isErrorDelete },
+  ] = useDeleteDocumentMutation();
+  const [
+    triggerViewDocument,
+    { isLoading: isLoadingView, isError: isErrorView },
+  ] = useLazyViewDocumentQuery();
+  const [
+    downloadDocument,
+    { isLoading: isLoadingDownload, isError: isErrorDownload },
+  ] = useLazyDownloadDocumentQuery();
+  const [shareDocument, { isLoading: isLoadingShare, isError: isErrorShare }] =
+    useLazyShareDocumentQuery();
+
+  const getDoc = useCallback(
+    (docKey) => documents.find((d) => d.docKey === docKey) || null,
+    [documents]
+  );
+
+  const groupedDocs = useMemo(() => {
+    const map = {};
+    documents.forEach((doc) => {
+      if (!map[doc.docKey]) map[doc.docKey] = [];
+      map[doc.docKey].push(doc);
+    });
+    return map;
+  }, [documents]);
+
+  // Group OTHER uploads by the provided document name (docName)
+  const otherGroups = useMemo(() => {
+    const map = {};
+    (groupedDocs.OTHER || []).forEach((doc) => {
+      const name = doc.docName || "Manual Upload";
+      if (!map[name]) map[name] = [];
+      map[name].push(doc);
+    });
+    return map;
+  }, [groupedDocs.OTHER]);
+  const resetUploadForm = () => {
+    setDocName("");
+    setFile(null);
+    setFiles([]);
   };
-const UploadDocuments = async () => {
-  try {
-    // 1️⃣ Open document picker
-    const result = await DocumentPicker.getDocumentAsync({
-      type: ["application/pdf", "image/*"],
-      copyToCacheDirectory: true,
-    });
+  const handleCancel = () => {
+    resetUploadForm();
+    setModalVisible(false);
+  };
 
-    if (result.canceled) return;
+  const onRefreshAll = async () => {
+    setRefreshing(true);
+    try {
+      await refetch(); // RTK Query
+    } catch (e) {
+      console.log("REFRESH ERROR", e);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
-    const file = result.assets[0];
+  const openGroupModal = (nameOrDocs) => {
+    let docs = [];
+    let title = "";
 
-    // 2️⃣ Prepare multipart FormData
-    const formData = new FormData();
-    formData.append("file", {
-      uri: file.uri,           // 🔥 MUST
-      name: file.name,         // 🔥 MUST
-      type: file.mimeType,     // 🔥 MUST
-    });
+    if (Array.isArray(nameOrDocs)) {
+      docs = nameOrDocs;
+      title = docs[0]?.docName || "Group";
+    } else {
+      title = nameOrDocs;
+      if (nameOrDocs === "Manual Uploads") {
+        docs = groupedDocs.MANUAL || [];
+      } else {
+        docs = otherGroups[nameOrDocs] || [];
+      }
+    }
 
-    formData.append("docName", "Aadhaar Card");
+    setGroupFilesList(docs);
+    setGroupTitle(title);
+    setGroupModalVisible(true);
 
-    // 3️⃣ Upload to backend (GridFS)
-    await uploadDocument(formData).unwrap();
+    // start preview with first file (if any)
+    if (docs.length > 0) previewGroupFileByDocs(docs, 0);
+  };
 
-    Toast.show({
-      type: "success",
-      text1: "Upload Successful",
-      text2: "Document saved in database",
-    });
+  // Preview helpers for group modal
+  const previewGroupFileByDocs = async (docs, index) => {
+    if (!docs || docs.length === 0) return;
+    const doc = docs[index];
+    try {
+      setIsPreviewLoading(true);
+      const token = await AsyncStorage.getItem("token");
+      const tempUri =
+        FileSystem.cacheDirectory +
+        (doc.originalName || doc.docName || "file").replace(/\s/g, "_");
 
-  } catch (error) {
-    console.log("UPLOAD ERROR:", error);
-    Toast.show({
-      type: "error",
-      text1: "Upload Failed",
-      text2: "Please try again",
-    });
-  }
-};
+      const downloadResumable = FileSystem.createDownloadResumable(
+        `${BASE_URL}/documents/download/${doc._id}`,
+        tempUri,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      const { uri } = await downloadResumable.downloadAsync();
+
+      // On Android convert to content:// URI for better compatibility (guarded)
+      let previewUri = uri;
+      if (
+        typeof Platform !== "undefined" &&
+        Platform.OS === "android" &&
+        typeof FileSystem.getContentUriAsync === "function"
+      ) {
+        try {
+          previewUri = await FileSystem.getContentUriAsync(uri);
+        } catch (e) {
+          // fallback to file uri
+        }
+      }
+
+      setGroupPreviewUri(previewUri);
+      setGroupPreviewType(doc.contentType || "");
+      setActiveIndex(index);
+    } catch (err) {
+      console.log("PREVIEW ERROR", err);
+      Toast.show({ type: "error", text1: "Preview Failed" });
+    } finally {
+      setIsPreviewLoading(false);
+    }
+  };
+
+  // const previewIndex = (newIndex) => {
+  //     if (!groupFilesList || groupFilesList.length === 0) return;
+  //     const clamped =
+  //       ((newIndex % groupFilesList.length) + groupFilesList.length) %
+  //       groupFilesList.length;
+  //     previewGroupFileByDocs(groupFilesList, clamped);
+  //   };
+  const previewIndex = (index) => {
+    if (index < 0 || index >= groupFilesList.length) return;
+
+    const file = groupFilesList[index];
+    setActiveIndex(index);
+    setGroupPreviewUri(file.fileUrl);
+    setGroupPreviewType(file.contentType);
+  };
+
+  useEffect(() => {
+    if (!groupModalVisible) {
+      setGroupPreviewUri(null);
+      setGroupPreviewType(null);
+      setActiveIndex(0);
+      setGroupFilesList([]);
+    }
+  }, [groupModalVisible]);
+
+  const uploadFast = async ({ files, docName, docKey, onSuccess }) => {
+    const MAX_PARALLEL = 3; // 🔥 mobile safe sweet spot
+
+    let index = 0;
+
+    const uploadNext = async () => {
+      if (index >= files.length) return;
+
+      const currentFile = files[index++];
+      const formData = new FormData();
+
+      formData.append("files", {
+        uri: currentFile.uri,
+        name: currentFile.name,
+        type: currentFile.mimeType || "application/octet-stream",
+      });
+
+      formData.append("docName", docName);
+      formData.append("docKey", docKey);
+
+      await uploadDocument(formData).unwrap();
+      await uploadNext();
+    };
+
+    await Promise.all(Array.from({ length: MAX_PARALLEL }, uploadNext));
+
+    onSuccess?.();
+  };
+
+  const uploadDocumentByType = async (type, label) => {
+    setLoadingAction({ type: "upload", id: type });
+
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: "*/*",
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled) return;
+
+      const asset = result.assets[0];
+
+      await uploadFast({
+        files: [
+          {
+            uri: asset.fileCopyUri || asset.uri,
+            name: asset.name,
+            mimeType: asset.mimeType,
+          },
+        ],
+        docName: label,
+        docKey: type,
+        onSuccess: () => {
+          Toast.show({
+            type: "success",
+            text1: `${label} Uploaded`,
+          });
+        },
+      });
+    } catch (err) {
+      console.log("UPLOAD ERROR 👉", err);
+      Toast.show({ type: "error", text1: "Upload Failed" });
+    } finally {
+      setLoadingAction({ type: null, id: null });
+    }
+  };
+
+  const handleManualUpload = async () => {
+    if (manualUploadingRef.current) return;
+
+    manualUploadingRef.current = true;
+    setIsManualUploading(true);
+    setLoadingAction({ type: "upload", id: "OTHER" });
+
+    try {
+      if (!docName) {
+        Toast.show({ type: "error", text1: "Please enter document name" });
+        return;
+      }
+
+      const allFiles =
+        files?.length > 0
+          ? files
+          : file
+          ? Array.isArray(file)
+            ? file
+            : [file]
+          : [];
+
+      if (allFiles.length === 0) {
+        Toast.show({ type: "error", text1: "Please select file(s)" });
+        return;
+      }
+
+      // 🔥 Deduplicate (important for speed + safety)
+      const unique = {};
+      allFiles.forEach((f) => {
+        const key = f.uri;
+        if (!unique[key]) unique[key] = f;
+      });
+
+      const finalFiles = Object.values(unique);
+
+      await uploadFast({
+        files: finalFiles,
+        docName,
+        docKey: "OTHER",
+        onSuccess: () => {
+          Toast.show({
+            type: "success",
+            text1: `${finalFiles.length} file(s) uploaded`,
+          });
+
+          setModalVisible(false);
+          setDocName("");
+          setFile(null);
+          setFiles([]);
+        },
+      });
+    } catch (err) {
+      console.log("UPLOAD ERROR", err);
+      Toast.show({ type: "error", text1: "Upload Failed" });
+    } finally {
+      manualUploadingRef.current = false;
+      setIsManualUploading(false);
+      setLoadingAction({ type: null, id: null });
+    }
+  };
+
+  // const handleManualUpload = async () => {
+  //   try {
+  //     if (!docName) {
+  //       Toast.show({ type: "error", text1: "Please enter document name" });
+  //       return;
+  //     }
+
+  //     // support both single `file` and multiple `files` state
+  //     const filesToUpload =
+  //       files && files.length > 0
+  //         ? files
+  //         : file
+  //           ? Array.isArray(file)
+  //             ? file
+  //             : [file]
+  //           : [];
+
+  //     if (filesToUpload.length === 0) {
+  //       Toast.show({ type: "error", text1: "Please select file(s)" });
+  //       return;
+  //     }
+
+  //     // Dedupe files by URI (avoid duplicates causing multiple uploads)
+  //     const uniqueMap = {};
+  //     filesToUpload.forEach((f) => {
+  //       const key = f.uri || `${f.name}-${f.size || 0}`;
+  //       if (!uniqueMap[key]) uniqueMap[key] = f;
+  //     });
+  //     const uniqueFiles = Object.values(uniqueMap);
+
+  //     if (uniqueFiles.length === 0) {
+  //       Toast.show({ type: "error", text1: "Please select file(s)" });
+  //       return;
+  //     }
+
+  //     setIsManualUploading(true);
+
+  //     // Put all files into a single FormData as `files[]`
+  //     const formData = new FormData();
+  //     uniqueFiles.forEach((f) => {
+  //       formData.append("files", {
+  //         uri: f.uri,
+  //         name: f.name,
+  //         type: f.mimeType || "application/octet-stream",
+  //       });
+  //     });
+
+  //     formData.append("docName", docName);
+  //     formData.append("docKey", "OTHER");
+
+  //     const res = await uploadDocument(formData).unwrap();
+
+  //     const uploadedCount = res?.documents?.length ?? uniqueFiles.length;
+
+  //     Toast.show({
+  //       type: "success",
+  //       text1: `${uploadedCount} file(s) uploaded successfully`,
+  //     });
+
+  //     setModalVisible(false);
+  //     setDocName("");
+  //     setFile(null);
+  //     setFiles([]);
+  //   } catch (err) {
+  //     console.log("UPLOAD ERROR", err);
+  //     Toast.show({ type: "error", text1: "Upload Failed" });
+  //   } finally {
+  //     setIsManualUploading(false);
+  //   }
+  // };
 
   const pickFile = async () => {
-    const result = await DocumentPicker.getDocumentAsync({
-      type: "*/*",
-    });
-    /*************  ✨ Windsurf Command ⭐  *************/
-    /**
-     * Opens the document picker to select a file
-     * and sets the selected file to the state using setFile
-     * @returns {Promise<void>} - Resolves when the document picker is closed
-     */
-    /*******  5991c03d-eebd-4152-b335-ef6a0ea9f301  *******/
-    // expo-document-picker returns { type: 'success'|'cancel', uri, name, size, mimeType }
-    if (result.type === "success") {
-      setFile(result);
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: "*/*", // ✅ ALL FILE TYPES
+        copyToCacheDirectory: true, // ✅ REQUIRED for large files
+        multiple: true,
+      });
+
+      if (result.canceled) return;
+
+      const assets = result.assets || [];
+
+      if (assets.length > 1) {
+        setFiles(
+          assets.map((asset) => ({
+            uri: asset.fileCopyUri || asset.uri,
+            name: asset.name,
+            mimeType: asset.mimeType || "application/octet-stream",
+            size: asset.size,
+          }))
+        );
+        setFile(null);
+      } else if (assets.length === 1) {
+        const asset = assets[0];
+        setFile({
+          uri: asset.fileCopyUri || asset.uri,
+          name: asset.name,
+          mimeType: asset.mimeType || "application/octet-stream",
+          size: asset.size,
+        });
+        setFiles([]);
+      }
+    } catch (err) {
+      console.log("PICK FILE ERROR", err);
     }
+  };
+
+  const handleView = async (doc) => {
+    setLoadingAction({ type: "view", id: doc._id });
+    try {
+      const token = await AsyncStorage.getItem("token");
+
+      // 1️⃣ Local file path
+      const fileUri =
+        FileSystem.cacheDirectory + doc.originalName.replace(/\s/g, "_");
+
+      // 2️⃣ Download file
+      const downloadResumable = FileSystem.createDownloadResumable(
+        `${BASE_URL}/documents/download/${doc._id}`,
+        fileUri,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const { uri } = await downloadResumable.downloadAsync();
+
+      // 🔥 3️⃣ Convert to content:// URI if available (guarded)
+      let contentUri = uri;
+      if (
+        typeof Platform !== "undefined" &&
+        Platform.OS === "android" &&
+        typeof FileSystem.getContentUriAsync === "function"
+      ) {
+        try {
+          contentUri = await FileSystem.getContentUriAsync(uri);
+        } catch (e) {
+          // fallback to file uri
+        }
+      }
+
+      // 4️⃣ Open with native app (Android) or fall back to in-app viewer
+      if (typeof Platform !== "undefined" && Platform.OS === "android") {
+        await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
+          data: contentUri,
+          flags: 1,
+          type: doc.contentType || "*/*",
+        });
+      } else {
+        setViewUri(contentUri);
+        setViewType(doc.contentType || "");
+        setViewVisible(true);
+      }
+    } catch (err) {
+      console.log("VIEW ERROR", err);
+      Toast.show({
+        type: "error",
+        text1: "Cannot open file",
+      });
+    } finally {
+      setLoadingAction({ type: null, id: null });
+    }
+  };
+
+  const handleDownload = async (doc) => {
+    setLoadingAction({ type: "download", id: doc._id });
+
+    try {
+      const token = await AsyncStorage.getItem("token");
+
+      const fileName = (doc.originalName || "document").replace(
+        /[^a-zA-Z0-9._-]/g,
+        "_"
+      );
+
+      // 1️⃣ Ask user ONCE where to save (Android rule)
+      const permission =
+        await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+
+      if (!permission.granted) {
+        Toast.show({
+          type: "error",
+          text1: "Permission denied",
+        });
+        return;
+      }
+
+      // 2️⃣ Create file in selected directory
+      const fileUri = await FileSystem.StorageAccessFramework.createFileAsync(
+        permission.directoryUri,
+        fileName,
+        doc.mimeType || "application/octet-stream"
+      );
+
+      // 3️⃣ Download file to cache
+      const tempUri = FileSystem.cacheDirectory + fileName;
+
+      const downloadResumable = FileSystem.createDownloadResumable(
+        `${BASE_URL}/documents/download/${doc._id}`,
+        tempUri,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+        (progress) => {
+          const percent =
+            (progress.totalBytesWritten / progress.totalBytesExpectedToWrite) *
+            100;
+          console.log(`Downloading: ${percent.toFixed(0)}%`);
+        }
+      );
+
+      const { uri } = await downloadResumable.downloadAsync();
+
+      // 4️⃣ Write file to selected folder (DIRECT SAVE)
+      const fileBase64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      await FileSystem.writeAsStringAsync(fileUri, fileBase64, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      Toast.show({
+        type: "success",
+        text1: "Downloaded successfully",
+      });
+    } catch (err) {
+      console.log("DOWNLOAD ERROR 👉", err);
+      Toast.show({
+        type: "error",
+        text1: "Download Failed",
+      });
+    } finally {
+      setLoadingAction({ type: null, id: null });
+    }
+  };
+
+  // const handleDownload = async (doc) => {
+  //   setLoadingAction({ type: "download", id: doc._id });
+
+  //   try {
+  //     const token = await AsyncStorage.getItem("token");
+
+  //     const safeName = (doc.originalName || "file")
+  //       .replace(/\s/g, "_");
+
+  //     const fileUri = FileSystem.documentDirectory + safeName;
+
+  //     const downloadResumable = FileSystem.createDownloadResumable(
+  //       `${BASE_URL}/documents/download/${doc._id}`,
+  //       fileUri,
+  //       {
+  //         headers: {
+  //           Authorization: `Bearer ${token}`,
+  //         },
+  //       },
+  //       (progress) => {
+  //         const percent =
+  //           (progress.totalBytesWritten /
+  //             progress.totalBytesExpectedToWrite) *
+  //           100;
+  //         console.log(`Downloading: ${percent.toFixed(0)}%`);
+  //       }
+  //     );
+
+  //     const { uri } = await downloadResumable.downloadAsync();
+
+  //     Toast.show({
+  //       type: "success",
+  //       text1: "Download completed",
+  //     });
+
+  //   } catch (err) {
+  //     console.log("DOWNLOAD ERROR", err);
+  //     Toast.show({
+  //       type: "error",
+  //       text1: "Download Failed",
+  //     });
+  //   } finally {
+  //     setLoadingAction({ type: null, id: null });
+  //   }
+  // };
+
+const handleShare = async (doc) => {
+    setLoadingAction({ type: "share", id: doc._id });
+    try {
+      const token = await AsyncStorage.getItem("token");
+
+      const fileUri =
+        FileSystem.cacheDirectory + doc.originalName.replace(/\s/g, "_");
+
+      await FileSystem.downloadAsync(
+        `${BASE_URL}/documents/download/${doc._id}`,
+        fileUri,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      await Sharing.shareAsync(fileUri);
+    } catch (err) {
+      Toast.show({ type: "error", text1: "Share Failed" });
+    } finally {
+      setLoadingAction({ type: null, id: null });
+    }
+  };
+
+// const filteredDocuments = useMemo(() => {
+  //   const constantKeys = [
+  //     "AADHAAR",
+  //     "PAN",
+  //     "DL",
+  //     "Passport",
+  //     "Insurance",
+  //     "Salary",
+  //     "Bank",
+  //   ];
+
+  //   // When not searching, show only MANUAL / OTHER uploaded documents in the list
+  //   if (!searchQuery.trim()) {
+  //     return documents.filter(
+  //       (d) => d.docKey === "MANUAL" || d.docKey === "OTHER"
+  //     );
+  //   }
+
+  //   // When searching, show ALL documents that match the query (including constants)
+  //   return documents.filter((doc) =>
+  //     doc.docName.toLowerCase().includes(searchQuery.toLowerCase())
+  //   );
+  // }, [documents, searchQuery]);
+  const handleDelete = (doc) => {
+    Alert.alert(
+      "Delete Document",
+      `Are you sure you want to delete ${doc.docName || doc.originalName}?`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setLoadingAction({ type: "delete", id: doc._id });
+
+              // 🔥 1️⃣ IMMEDIATE UI UPDATE (Modal / Group)
+              setGroupFilesList((prev) => {
+                const updated = prev.filter((d) => d._id !== doc._id);
+
+                // preview index fix
+                if (activeIndex >= updated.length) {
+                  setActiveIndex(Math.max(updated.length - 1, 0));
+                }
+
+                // close modal if empty
+                if (updated.length === 0) {
+                  setGroupPreviewUri(null);
+                  setGroupPreviewType(null);
+                  setGroupModalVisible(false); // 👈 modal close
+                }
+
+                return updated;
+              });
+
+              // 🔥 2️⃣ BACKEND DELETE
+              await deleteDocument(doc._id).unwrap();
+
+              // 🔥 3️⃣ DASHBOARD RESET (single-doc cards)
+              setDocs((prev) => ({
+                ...prev,
+                [doc.docKey]: null,
+              }));
+
+              Toast.show({
+                type: "success",
+                text1: "Document deleted",
+              });
+            } catch (err) {
+              console.log("DELETE ERROR", err);
+              Toast.show({
+                type: "error",
+                text1: "Delete Failed",
+              });
+            } finally {
+              setLoadingAction({ type: null, id: null });
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const filteredDocuments = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+
+    // 🔎 SEARCH MODE → group matching documents by docName so duplicates don't show repeatedly
+    if (q) {
+      const map = {};
+      documents
+        .filter((doc) => (doc.docName || "").toLowerCase().includes(q))
+        .forEach((doc) => {
+          const key = doc.docName || doc.originalName || doc._id;
+
+          if (!map[key]) {
+            map[key] = {
+              ...doc, // base document (first match)
+              _count: 1,
+              _docs: [doc],
+            };
+          } else {
+            map[key]._count += 1;
+            map[key]._docs.push(doc);
+          }
+        });
+
+      return Object.values(map);
+    }
+
+    // 📂 NORMAL MODE → header already shows MANUAL/OTHER groups
+    // Return an empty list so uploaded docs are shown only in the header
+    return [];
+  }, [documents, searchQuery]);
+
+  const DocumentCard = ({
+    title,
+    desc,
+    docKey,
+    uploaded,
+    onUpload,
+    onDelete,
+    countText,
+    onView, // optional override for View action
+  }) => {
+    return (
+      <View style={styles.card}>
+        <View style={styles.row}>
+          <View
+            style={[
+              styles.iconCircle,
+              uploaded ? styles.greenBg : styles.blueBg,
+            ]}
+          >
+            <Icon
+              name={uploaded ? "check" : "card-account-details-outline"}
+              size={22}
+              color={uploaded ? "#16a34a" : "#2563eb"}
+            />
+          </View>
+
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cardTitle}>{title}</Text>
+            {uploaded ? (
+              <View>
+                <Text style={styles.successText}>
+                  {countText ?? "Uploaded Successfully"}
+                </Text>
+                {uploaded?.createdAt && (
+                  <Text style={styles.dateText}>
+                    Uploaded on:{" "}
+                    {new Date(uploaded.createdAt).toLocaleDateString("en-IN", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </Text>
+                )}
+              </View>
+            ) : (
+              <Text style={styles.subText}>{desc}</Text>
+            )}
+          </View>
+
+          {!uploaded && (
+            <TouchableOpacity
+              style={styles.primaryBtn}
+              onPress={() => onUpload(docKey, title)}
+              disabled={
+                loadingAction.type === "upload" && loadingAction.id === docKey
+              }
+            >
+              {loadingAction.type === "upload" &&
+              loadingAction.id === docKey ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.primaryBtnText}>Upload</Text>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Action Buttons Row (Only when uploaded) */}
+        {uploaded && (
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={() => (onView ? onView(uploaded) : handleView(uploaded))}
+              disabled={
+                loadingAction.type === "view" &&
+                loadingAction.id === uploaded._id
+              }
+            >
+              {loadingAction.type === "view" &&
+              loadingAction.id === uploaded._id ? (
+                <ActivityIndicator color="#2563EB" />
+              ) : (
+                <>
+                  <Icon name="eye-outline" size={20} color="#2563EB" />
+                  <Text style={[styles.actionText, { color: "#2563EB" }]}>
+                    View
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={() => handleDownload(uploaded)}
+              disabled={
+                loadingAction.type === "download" &&
+                loadingAction.id === uploaded._id
+              }
+            >
+              {loadingAction.type === "download" &&
+              loadingAction.id === uploaded._id ? (
+                <ActivityIndicator color="#16A34A" />
+              ) : (
+                <>
+                  <Icon name="download-outline" size={20} color="#16A34A" />
+                  <Text style={[styles.actionText, { color: "#16A34A" }]}>
+                    Save
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={() => handleShare(uploaded)}
+              disabled={
+                loadingAction.type === "share" &&
+                loadingAction.id === uploaded._id
+              }
+            >
+              {loadingAction.type === "share" &&
+              loadingAction.id === uploaded._id ? (
+                <ActivityIndicator color="#7C3AED" />
+              ) : (
+                <>
+                  <Icon
+                    name="share-variant-outline"
+                    size={20}
+                    color="#7C3AED"
+                  />
+                  <Text style={[styles.actionText, { color: "#7C3AED" }]}>
+                    Share
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={() => handleDelete(uploaded)}
+              disabled={
+                loadingAction.type === "delete" &&
+                loadingAction.id === uploaded._id
+              }
+            >
+              {loadingAction.type === "delete" &&
+              loadingAction.id === uploaded._id ? (
+                <ActivityIndicator color="#DC2626" />
+              ) : (
+                <>
+                  <Icon name="delete-outline" size={20} color="#DC2626" />
+                  <Text style={[styles.actionText, { color: "#DC2626" }]}>
+                    Delete
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    );
   };
 
   return (
     <SafeAreaView style={{ flex: 1 }}>
       <View style={styles.container}>
-        <TextInput
-          style={styles.Txtinput}
-          placeholder="Search Documents..."
-          placeholderTextColor="#6b7280"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
+        <FlatList
+          data={filteredDocuments}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefreshAll} />
+          }
+          keyExtractor={(item) => item._id}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            <>
+              <TextInput
+                style={styles.Txtinput}
+                placeholder="Search Documents..."
+                placeholderTextColor="#6b7280"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+
+              {!searchQuery.trim() && (
+                <>
+                  <DocumentCard
+                    title="Aadhaar Card"
+                    desc="Upload ID card"
+                    docKey="AADHAAR"
+                    uploaded={getDoc("AADHAAR")}
+                    onUpload={uploadDocumentByType}
+                    onDelete={handleDelete}
+                  />
+
+                  <DocumentCard
+                    title="PAN Card"
+                    desc="Upload document"
+                    docKey="PAN"
+                    uploaded={getDoc("PAN")}
+                    onUpload={uploadDocumentByType}
+                    onDelete={handleDelete}
+                  />
+
+                  <DocumentCard
+                    title="Driving License"
+                    desc="Upload driving license"
+                    docKey="DL"
+                    uploaded={getDoc("DL")}
+                    onUpload={uploadDocumentByType}
+                    onDelete={handleDelete}
+                  />
+                  <DocumentCard
+                    title="Passport"
+                    desc="Upload passport"
+                    docKey="Passport"
+                    uploaded={getDoc("Passport")}
+                    onUpload={uploadDocumentByType}
+                    onDelete={handleDelete}
+                  />
+                  <DocumentCard
+                    title="Insurance Policy"
+                    desc="Upload Insurance Policy"
+                    docKey="Insurance"
+                    uploaded={getDoc("Insurance")}
+                    onUpload={uploadDocumentByType}
+                    onDelete={handleDelete}
+                  />
+                  <DocumentCard
+                    title="Salary Slip"
+                    desc="Upload Salary Slip"
+                    docKey="Salary"
+                    uploaded={getDoc("Salary")}
+                    onUpload={uploadDocumentByType}
+                    onDelete={handleDelete}
+                  />
+                  <DocumentCard
+                    title="Bank Statement"
+                    desc="Upload Bank Statement"
+                    docKey="Bank"
+                    uploaded={getDoc("Bank")}
+                    onUpload={uploadDocumentByType}
+                    onDelete={handleDelete}
+                  />
+
+                  {/* Other Documents */}
+                  <Text style={styles.sectionTitle}>Other Documents</Text>
+
+                  <TouchableOpacity
+                    style={styles.card}
+                    onPress={() => setModalVisible(true)}
+                  >
+                    <View style={styles.row}>
+                      <View style={[styles.iconCircle, styles.blueBg]}>
+                        <Icon name="upload-outline" size={22} color="#2563eb" />
+                      </View>
+                      <Text style={[styles.cardTitle, { flex: 1 }]}>
+                        Manually Upload Document
+                      </Text>
+                      <Icon name="chevron-right" size={26} />
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* MODAL */}
+                  <Modal
+                    transparent
+                    animationType="fade"
+                    visible={modalVisible}
+                    onRequestClose={() => setModalVisible(false)}
+                  >
+                    <View style={styles.overlay}>
+                      <View style={styles.modalBox}>
+                        {/* Title */}
+                        <Text style={styles.modalTitle}>Manual Upload</Text>
+
+                        {/* Document Name */}
+                        <Text style={styles.label}>Document Name</Text>
+                        <TextInput
+                          style={styles.input}
+                          placeholder="Enter Document Name"
+                          placeholderTextColor="#6b7280"
+                          value={docName}
+                          onChangeText={setDocName}
+                        />
+
+                        {/* File Attachment */}
+                        <Text style={[styles.label, { marginTop: 16 }]}>
+                          File Attachment
+                        </Text>
+
+                        <Pressable style={styles.uploadBox} onPress={pickFile}>
+                          <Ionicons
+                            name="cloud-upload"
+                            size={28}
+                            color="#1565C0"
+                          />
+                          <Text style={styles.uploadText}>
+                            {files && files.length > 1
+                              ? `${files.length} file(s) selected`
+                              : file
+                              ? file.name
+                              : "Click to Upload File"}
+                          </Text>
+                          <Text style={styles.fileType}>
+                            PDF, JPG, or PNG etc
+                          </Text>
+                        </Pressable>
+
+                        {/* Buttons */}
+                        <View style={styles.buttonRow}>
+                          <TouchableOpacity
+                            style={styles.cancelBtn}
+                            onPress={handleCancel}
+                            disabled={isManualUploading}
+                          >
+                            <Text style={styles.cancelText}>Cancel</Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={[
+                              styles.uploadBtn,
+                              isManualUploading && { opacity: 0.6 },
+                            ]}
+                            onPress={handleManualUpload}
+                            disabled={isManualUploading}
+                          >
+                            {isManualUploading ? (
+                              <ActivityIndicator color="#fff" />
+                            ) : (
+                              <Text style={styles.uploadBtnText}>Upload</Text>
+                            )}
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </View>
+                  </Modal>
+
+                  {/* Manual / Other Uploaded Summary */}
+                  {groupedDocs.MANUAL?.length > 0 && (
+                    <DocumentCard
+                      title={"Manual Uploads"}
+                      uploaded={groupedDocs.MANUAL[0]}
+                      countText={`${groupedDocs.MANUAL.length} Uploaded Successfully`}
+                      onView={() => {
+                        if (groupedDocs.MANUAL.length === 1) {
+                          // single file → open directly
+                          handleView(groupedDocs.MANUAL[0]);
+                        } else {
+                          // multiple files → open modal
+                          openGroupModal("Manual Uploads");
+                        }
+                      }}
+                    />
+                  )}
+
+                  {/* Uploaded Documents */}
+                  <Text style={styles.sectionTitle}>Uploaded Documents</Text>
+                  {Object.keys(otherGroups).length > 0 && (
+                    <>
+                      {Object.entries(otherGroups).map(([name, docs]) => (
+                        <DocumentCard
+                          key={name}
+                          title={name}
+                          uploaded={docs[0]}
+                          countText={`${docs.length} Uploaded Successfully`}
+                          onView={() =>
+                            docs.length === 1
+                              ? handleView(docs[0])
+                              : openGroupModal(name)
+                          }
+                        />
+                      ))}
+                    </>
+                  )}
+                </>
+              )}
+              {isLoading && (
+                <View style={{ flex: 1, justifyContent: "center" }}>
+                  <ActivityIndicator size="large" color="#2563EB" />
+                </View>
+              )}
+              {isError && (
+                <View style={{ padding: 16 }}>
+                  <Text style={{ color: "red", textAlign: "center" }}>
+                    {isError}
+                  </Text>
+                </View>
+              )}
+            </>
+          }
+          renderItem={({ item }) => {
+            const count = item._count || 1;
+            const title = item.docName || item.originalName || "Manual Upload";
+
+            return (
+              <DocumentCard
+                title={title}
+                uploaded={item}
+                countText={
+                  count > 1 ? `${count} Uploaded Successfully` : undefined
+                }
+                onView={() =>
+                  count > 1
+                    ? openGroupModal(item._docs || [item])
+                    : handleView(item)
+                }
+                onDownload={handleDownload}
+                onShare={handleShare}
+                onDelete={handleDelete}
+              />
+            );
+          }}
+          ListFooterComponent={() => <View style={{ marginBottom: 40 }} />}
         />
+      </View>
 
-        <ScrollView showsVerticalScrollIndicator={false}>
-          {/* Aadhaar Card */}
-          <View style={styles.card}>
-            <View style={styles.row}>
-              <View style={[styles.iconCircle, styles.blueBg]}>
-                <Icon
-                  name="card-account-details-outline"
-                  size={22}
-                  color="#2563eb"
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>Aadhaar Card</Text>
-                <Text style={styles.subText}>Upload your national ID card</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.primaryBtn}
-                onPress={UploadDocuments}
-              >
-                <Text style={styles.primaryBtnText}>Upload</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* PAN Card (Uploaded) */}
-          <View style={styles.card}>
+      {/* Group files modal (shows when a grouped card's View is tapped) */}
+      <Modal
+        visible={groupModalVisible}
+        animationType="slide"
+        onRequestClose={() => setGroupModalVisible(false)}
+      >
+        <SafeAreaView style={{ flex: 1 }}>
+          <View style={[styles.card, { margin: 16 }]}>
             <View style={styles.row}>
               <View style={[styles.iconCircle, styles.greenBg]}>
                 <Icon name="check" size={22} color="#16a34a" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>PAN Card</Text>
-                <Text style={styles.successText}>Uploaded Successfully</Text>
-              </View>
-              <View style={styles.iconRow}>
-                <TouchableOpacity style={styles.iconBtn}>
-                  <Icon name="eye-outline" size={22} color="#2563EB" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.iconBtn}>
-                  <Icon name="download-outline" size={22} color="#16A34A" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.iconBtn}>
-                  <Icon
-                    name="share-variant-outline"
-                    size={22}
-                    color="#7C3AED"
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.iconBtn}>
-                  <Icon name="delete-outline" size={22} color="#DC2626" />
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-
-          {/* Driving License (Failed) */}
-          <View style={styles.card}>
-            <View style={styles.row}>
-              <View style={[styles.iconCircle, styles.redBg]}>
-                <Icon name="alert-circle-outline" size={22} color="#dc2626" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>Driving License</Text>
-                <Text style={styles.errorText}>
-                  Upload failed. Please try again.
+                <Text style={styles.cardTitle}>{groupTitle}</Text>
+                <Text style={styles.successText}>
+                  {groupFilesList.length} Uploaded Successfully
                 </Text>
               </View>
-              <TouchableOpacity style={styles.primaryBtn}>
-                <Text style={styles.primaryBtnText}>Retry</Text>
+              <TouchableOpacity onPress={() => setGroupModalVisible(false)}>
+                <Text style={{ color: "#2563EB", fontWeight: "600" }}>
+                  Close
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* Other Documents */}
-          <Text style={styles.sectionTitle}>Other Documents</Text>
-
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() => setModalVisible(true)}
-          >
-            <View style={styles.row}>
-              <View style={[styles.iconCircle, styles.blueBg]}>
-                <Icon name="upload-outline" size={22} color="#2563eb" />
-              </View>
-              <Text style={[styles.cardTitle, { flex: 1 }]}>
-                Manually Upload Document
-              </Text>
-              <Icon name="chevron-right" size={26} />
-            </View>
-          </TouchableOpacity>
-          {/* MODAL */}
-          <Modal
-            transparent
-            animationType="fade"
-            visible={modalVisible}
-            onRequestClose={() => setModalVisible(false)}
-          >
-            <View style={styles.overlay}>
-              <View style={styles.modalBox}>
-                {/* Title */}
-                <Text style={styles.modalTitle}>Manual Upload</Text>
-
-                {/* Document Name */}
-                <Text style={styles.label}>Document Name</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. Insurance Policy"
-                  value={docName}
-                  onChangeText={setDocName}
-                />
-
-                {/* File Attachment */}
-                <Text style={[styles.label, { marginTop: 16 }]}>
-                  File Attachment
-                </Text>
-
-                <Pressable style={styles.uploadBox} onPress={pickFile}>
-                  <Ionicons name="cloud-upload" size={28} color="#1565C0" />
-                  <Text style={styles.uploadText}>
-                    {file ? file.name : "Click to Upload File"}
-                  </Text>
-                  <Text style={styles.fileType}>PDF, JPG, or PNG</Text>
-                </Pressable>
-
-                {/* Buttons */}
-                <View style={styles.buttonRow}>
+          {/* Preview area */}
+          <View style={styles.previewContainer}>
+            {isPreviewLoading ? (
+              <ActivityIndicator size="large" color="#2563EB" />
+            ) : groupPreviewUri ? (
+              <>
+                <View style={styles.previewNav}>
                   <TouchableOpacity
-                    style={styles.cancelBtn}
-                    onPress={() => setModalVisible(false)}
+                    onPress={() => previewIndex(activeIndex - 1)}
+                    style={styles.navBtn}
                   >
-                    <Text style={styles.cancelText}>Cancel</Text>
+                    <Text style={{ fontSize: 22 }}>‹</Text>
                   </TouchableOpacity>
+
+                  <View style={styles.previewBox}>
+                    {groupPreviewType?.includes("image") ? (
+                      <Image
+                        source={{ uri: groupPreviewUri }}
+                        style={styles.previewImage}
+                        resizeMode="contain"
+                      />
+                    ) : groupPreviewType?.includes("video") ? (
+                      <WebView
+                        originWhitelist={["*"]}
+                        source={{
+                          html: `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"/></head><body style="margin:0;background:#000"><video controls autoplay style="width:100%;height:100%"><source src="${groupPreviewUri}" type="${groupPreviewType}"/></video></body></html>`,
+                        }}
+                        style={{ width: "100%", height: "100%" }}
+                      />
+                    ) : (
+                      <View
+                        style={{
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <Text style={{ color: "#6b7280" }}>
+                          Please open with native app.
+                        </Text>
+                        <TouchableOpacity
+                          onPress={() =>
+                            handleView(groupFilesList[activeIndex])
+                          }
+                          style={{ marginTop: 8 }}
+                        >
+                          <Text style={{ color: "#2563EB", fontWeight: "600" }}>
+                            Open
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
 
                   <TouchableOpacity
-                    style={styles.uploadBtn}
-                    onPress={UploadDocuments}
+                    onPress={() => previewIndex(activeIndex + 1)}
+                    style={styles.navBtn}
                   >
-                    <Text style={styles.uploadBtnText}>Upload</Text>
+                    <Text style={{ fontSize: 22 }}>›</Text>
                   </TouchableOpacity>
                 </View>
-              </View>
-            </View>
-          </Modal>
-          {/* Uploaded Documents */}
-          <Text style={styles.sectionTitle}>Uploaded Documents</Text>
 
-          {[
-            { name: "Aadhaar Card", date: "24 May 2024" },
-            { name: "PAN Card", date: "23 May 2024" },
-            { name: "Driving License", date: "22 May 2024" },
-            { name: "Invoice_April.pdf", date: "21 May 2024" },
-          ].map((item, index) => (
-            <View key={index} style={styles.card}>
-              <View style={styles.row}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.cardTitle}>{item.name}</Text>
-                  <Text style={styles.subText}>Uploaded on: {item.date}</Text>
-                </View>
-                <View style={styles.iconRow}>
-                  <TouchableOpacity style={styles.iconBtn}>
-                    <Icon name="eye-outline" size={22} color="#2563EB" />
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "center",
+                    gap: 12,
+                    marginTop: 8,
+                  }}
+                >
+                  <TouchableOpacity
+                    onPress={() => handleDownload(groupFilesList[activeIndex])}
+                  >
+                    <Icon name="download-outline" size={20} color="#16A34A" />
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.iconBtn}>
-                    <Icon name="download-outline" size={22} color="#16A34A" />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.iconBtn}>
+
+                  <TouchableOpacity
+                    onPress={() => handleShare(groupFilesList[activeIndex])}
+                  >
                     <Icon
                       name="share-variant-outline"
-                      size={22}
+                      size={20}
                       color="#7C3AED"
                     />
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.iconBtn}>
-                    <Icon name="delete-outline" size={22} color="#DC2626" />
+
+                  <TouchableOpacity
+                    onPress={() => handleDelete(groupFilesList[activeIndex])}
+                  >
+                    <Icon name="delete-outline" size={20} color="#DC2626" />
                   </TouchableOpacity>
                 </View>
-              </View>
-            </View>
-          ))}
+              </>
+            ) : (
+              <View/>
+            )} 
+              
+          </View>
 
-          <View style={{ height: 30 }} />
-        </ScrollView>
-      </View>
+          <View style={{ paddingHorizontal: 16 }}>
+            {groupFilesList.map((doc, idx) => (
+              <View
+                key={doc._id}
+                style={[styles.card, { paddingVertical: 12, marginBottom: 8 }]}
+              >
+                <View style={styles.row}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.fileName} numberOfLines={1}>
+                      {doc.originalName || doc.docName}
+                    </Text>
+                    {doc.createdAt && (
+                      <Text style={styles.dateText}>
+                        Uploaded on:{" "}
+                        {new Date(doc.createdAt).toLocaleDateString("en-IN", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </Text>
+                    )}
+                  </View>
+
+                  <View style={styles.iconRow}>
+                    <TouchableOpacity
+                      onPress={() =>
+                        previewGroupFileByDocs(groupFilesList, idx)
+                      }
+                    >
+                      <Icon name="eye-outline" size={18} color="#2563EB" />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity onPress={() => handleDownload(doc)}>
+                      <Icon name="download-outline" size={18} color="#16A34A" />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity onPress={() => handleShare(doc)}>
+                      <Icon
+                        name="share-variant-outline"
+                        size={18}
+                        color="#7C3AED"
+                      />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity onPress={() => handleDelete(doc)}>
+                      <Icon name="delete-outline" size={18} color="#DC2626" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      <Modal visible={viewVisible} animationType="slide">
+        {viewType?.includes("image") ? (
+          <Image
+            source={{ uri: viewUri }}
+            style={{ flex: 1, resizeMode: "contain" }}
+          />
+        ) : (
+          <WebView source={{ uri: viewUri }} style={{ flex: 1 }} />
+        )}
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -309,6 +1422,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     marginVertical: 12,
+    paddingTop: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
   },
   card: {
     backgroundColor: "#fff",
@@ -380,13 +1496,28 @@ const styles = StyleSheet.create({
 
     fontWeight: "600",
   },
-  iconRow: {
+  actionRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#f3f4f6",
+  },
+  actionBtn: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 6,
+    paddingVertical: 4,
   },
-  iconBtn: {
-    padding: 8,
-    borderRadius: 20,
+  actionText: {
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  dateText: {
+    fontSize: 12,
+    color: "#6b7280",
+    marginTop: 2,
   },
   manualCard: {
     backgroundColor: "#fff",
@@ -400,6 +1531,71 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: "500",
+  },
+
+  /* Manual files list */
+  multiFileBox: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 12,
+    marginVertical: 10,
+    elevation: 1,
+  },
+  fileRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
+  },
+  fileName: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "500",
+    marginRight: 12,
+  },
+  iconRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  countTextGreen: {
+    color: "#16a34a",
+    fontWeight: "700",
+    marginBottom: 8,
+  },
+
+  /* Group Preview */
+  previewContainer: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 12,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    alignItems: "center",
+  },
+  previewNav: {
+    flexDirection: "row",
+    alignItems: "center",
+    width: "100%",
+  },
+  navBtn: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  previewBox: {
+    flex: 1,
+    height: 220,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+  },
+  previewImage: {
+    width: "100%",
+    height: "100%",
   },
 
   overlay: {
