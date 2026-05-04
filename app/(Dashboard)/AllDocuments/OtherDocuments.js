@@ -781,7 +781,7 @@ const OtherDocuments = () => {
         <FlatList
           data={filteredDocuments}
           keyExtractor={(item) => item._id}
-          contentContainerStyle={{paddingTop: 0, paddingBottom: 80 }}
+          contentContainerStyle={{paddingTop: 0, paddingBottom: 180 }}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefreshAll} />
           }

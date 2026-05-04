@@ -25,9 +25,9 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View,ScrollView,
 } from "react-native";
-import { useEffect } from "react";
+
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
 
@@ -40,6 +40,27 @@ import {
 import { useSelector } from "react-redux";
 import { BACKEND_IP, BACKEND_PORT } from "../../../src/config";
 const API_BASE_URL = `http://${BACKEND_IP}:${BACKEND_PORT}/api`;
+
+// 🔹 Helper function to get MIME type from filename or contentType
+const getMimeType = (contentType) => {
+  if (!contentType) return "application/octet-stream";
+
+  const type = contentType.toLowerCase();
+
+  if (type.includes("pdf")) return "application/pdf";
+  if (type.includes("word") || type.includes("document"))
+    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (type.includes("excel") || type.includes("sheet"))
+    return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  if (type.includes("powerpoint"))
+    return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+  if (type.includes("text")) return "text/plain";
+  if (type.includes("image")) return contentType;
+  if (type.includes("video")) return contentType;
+  if (type.includes("audio")) return contentType;
+
+  return contentType;
+};
 
 const HRRecords = () => {
   const [modalVisible, setModalVisible] = useState(false);
@@ -90,7 +111,6 @@ const HRRecords = () => {
       };
     }, []),
   );
-
 
   // helper to format date strings safely
   const formatDate = (val) => {
@@ -215,9 +235,6 @@ const HRRecords = () => {
         if (!f?.uri) return;
         formData.append("files", {
           uri: f.uri,
-          // name: f.name || `file_${index}`,
-          // type: f.type || f.mimeType || "application/octet-stream",
-
           name: f.name || `document_${index}.pdf`,
           type: f.mimeType || "application/pdf", // 🔥 KEY FIX
         });
@@ -255,51 +272,110 @@ const HRRecords = () => {
         Toast.show({ type: "error", text1: "Invalid document" });
         return;
       }
-      // Close the action modal immediately so returning from external viewers
+      // Close the action modal immediately
       setActionVisible(false);
 
-      const token = await AsyncStorage.getItem("token");
+      Toast.show({
+        type: "info",
+        text1: "Opening document...",
+      });
 
-      // Ensure filename contains an extension so Android can resolve a viewer
+      const mimeType = getMimeType(doc.contentType);
+
+      // Ensure filename has proper extension
       let fileName = doc.originalName || `document_${Date.now()}`;
-      if (!fileName.includes(".") && doc.contentType) {
-        const ext = doc.contentType.split("/")[1] || "pdf";
+      if (!fileName.includes(".")) {
+        const ext = mimeType.split("/")[1] || "pdf";
         fileName = `${fileName}.${ext}`;
       }
 
       const fileUri = FileSystem.cacheDirectory + fileName;
 
+      console.log("📥 Viewing document:", {
+        fileName,
+        contentType: doc.contentType,
+        mimeType,
+        fileUrl: doc.fileUrl?.substring(0, 50) + "...",
+      });
+
+      // Download directly from fileUrl (already has proper format from server)
       const downloadResumable = FileSystem.createDownloadResumable(
-        `${API_BASE_URL}/admin/view/${doc._id}?token=${token}`,
+        doc.fileUrl,
         fileUri,
+        {
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Android) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36",
+          },
+        },
       );
 
       const { uri } = await downloadResumable.downloadAsync();
 
-      // On Android, convert file:// URI to a content:// URI so other apps can read it
+      if (!uri) {
+        throw new Error("Failed to download document");
+      }
+
+      console.log("✅ Downloaded to:", uri);
+
+      // Verify file exists and has content
+      const fileInfo = await FileSystem.getInfoAsync(uri);
+      console.log("📄 File info:", {
+        exists: fileInfo.exists,
+        size: fileInfo.size,
+        isDirectory: fileInfo.isDirectory,
+      });
+
+      if (!fileInfo.exists || fileInfo.size === 0) {
+        throw new Error("Downloaded file is empty or missing");
+      }
+
+      // Small delay to ensure file is properly written
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      // On Android, use content:// URI
       let launchUri = uri;
       if (Platform.OS === "android") {
         try {
           const contentUri = await FileSystem.getContentUriAsync(uri);
           launchUri = contentUri;
+          console.log("📱 Using content URI:", contentUri);
         } catch (e) {
           console.log(
-            "Could not get content URI, falling back to file URI:",
+            "⚠️ Could not convert to content URI, using file URI:",
             e,
           );
+          launchUri = uri;
         }
       }
 
+      console.log("🚀 Launching viewer:", {
+        uri: launchUri?.substring(0, 70),
+        mimeType,
+      });
+
+      // Launch with proper flags and MIME type
       await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
         data: launchUri,
-        flags: 1,
-        type: doc.contentType || "application/octet-stream",
+        flags: 335544320, // FLAG_ACTIVITY_NEW_TASK | FLAG_GRANT_READ_URI_PERMISSION
+        type: mimeType,
       });
+
+      // Only show success if no error was thrown
+      setTimeout(() => {
+        Toast.show({
+          type: "success",
+          text1: "Document opened",
+        });
+      }, 800);
     } catch (error) {
-      console.log("❌ View document error:", error);
+      console.error("❌ View document error:", error);
+      console.log("Full error details:", JSON.stringify(error, null, 2));
+
       Toast.show({
         type: "error",
         text1: "Unable to open document",
+        text2: error?.message || "No viewer app found or file corrupted",
       });
     }
   };
@@ -311,10 +387,8 @@ const HRRecords = () => {
         return;
       }
       setActionVisible(false);
-      const token = await AsyncStorage.getItem("token");
-
       // 🔐 Secure view URL
-      const fileUrl = `${API_BASE_URL}/admin/view/${doc._id}?token=${token}`;
+      const fileUrl = doc.fileUrl;
 
       // 📂 Temp file path
       const fileUri =
@@ -348,6 +422,67 @@ const HRRecords = () => {
     }
   };
   // Download Documents
+
+  // const handleDownloadDocument = async (doc) => {
+  //   try {
+  //     const token = await AsyncStorage.getItem("token");
+
+  //     let fileName = doc.originalName || `file-${Date.now()}`;
+
+  //     if (!fileName.includes(".")) {
+  //       fileName += ".pdf";
+  //     }
+  //     setActionVisible(false);
+
+  //     const fileUri = FileSystem.documentDirectory + fileName;
+
+  //     let lastProgress = 0;
+
+  //     const downloadResumable = FileSystem.createDownloadResumable(
+  //       `${API_BASE_URL}/admin/download/${doc._id}`,
+  //       fileUri,
+  //       {
+  //         headers: {
+  //           Authorization: `Bearer ${token}`,
+  //         },
+  //       },
+  //       (progress) => {
+  //         const percent = Math.round(
+  //           (progress.totalBytesWritten /
+  //             progress.totalBytesExpectedToWrite) *
+  //             100
+  //         );
+
+  //         if (percent - lastProgress >= 10) {
+  //           lastProgress = percent;
+  //           Toast.show({
+  //             type: "info",
+  //             text1: `Downloading ${percent}%`,
+  //           });
+  //         }
+  //       }
+  //     );
+
+  //     const { uri } = await downloadResumable.downloadAsync();
+
+  //     console.log("Saved at:", uri);
+
+  //     Toast.show({
+  //       type: "success",
+  //       text1: "Download complete",
+  //     });
+
+  //   } catch (error) {
+  //     console.log("❌ Download error:", error);
+
+  //     Toast.show({
+  //       type: "error",
+  //       text1: "Download failed",
+  //       text2: error.message,
+  //     });
+  //   }
+  // };
+
   const handleDownloadDocument = async (doc) => {
     try {
       if (!doc?._id) {
@@ -358,20 +493,54 @@ const HRRecords = () => {
       setActionVisible(false);
 
       const token = await AsyncStorage.getItem("token");
-      const downloadUrl = `${API_BASE_URL}/admin/download/${doc._id}?token=${token}`;
 
-      const fileName = doc.originalName || `document-${Date.now()}`;
-
-      const fileUri = FileSystem.cacheDirectory + fileName;
+      if (!token) {
+        Toast.show({ type: "error", text1: "Not authenticated" });
+        return;
+      }
 
       Toast.show({
         type: "info",
-        text1: "Downloading started...",
+        text1: "Downloading...",
+      });
+
+      // 🔹 Step 1: Get download URL from backend
+      const res = await fetch(`${API_BASE_URL}/admin/download/${doc._id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) {
+        throw new Error(`Server error: ${res.status}`);
+      }
+
+      const data = await res.json();
+
+      if (!data.success || !data.url) {
+        throw new Error(data.message || "Failed to get download URL");
+      }
+
+      let fileName = data.fileName || doc.originalName || `file-${Date.now()}`;
+
+      // Ensure file has extension
+      if (!fileName.includes(".")) {
+        const ext = getMimeType(doc.contentType).split("/")[1] || "pdf";
+        fileName += `.${ext}`;
+      }
+
+      // 🔹 Step 2: Download file to cache
+      let downloadProgress = 0;
+      const tempUri = FileSystem.cacheDirectory + fileName;
+
+      Toast.show({
+        type: "info",
+        text1: "Downloading 0%",
       });
 
       const downloadResumable = FileSystem.createDownloadResumable(
-        downloadUrl,
-        fileUri,
+        data.url,
+        tempUri,
         {},
         (progress) => {
           const percent = Math.round(
@@ -379,48 +548,125 @@ const HRRecords = () => {
               100,
           );
 
-          // 🔕 Avoid too many toasts
-          if (percent - lastProgress >= 10) {
-            lastProgress = percent;
+          if (percent - downloadProgress >= 10 || percent === 100) {
+            downloadProgress = percent;
             Toast.show({
               type: "info",
-              text1: `Downloading... ${percent}%`,
+              text1: `Downloading ${percent}%`,
             });
           }
         },
       );
 
-      const { uri } = await downloadResumable.downloadAsync();
+      const { uri: downloadedUri } = await downloadResumable.downloadAsync();
 
-      // ✅ ANDROID SAVE TO DOWNLOADS
+      if (!downloadedUri) {
+        throw new Error("Download failed");
+      }
+
+      // 🔹 Step 3: Verify file
+      const fileInfo = await FileSystem.getInfoAsync(downloadedUri);
+      if (!fileInfo.exists || fileInfo.size === 0) {
+        throw new Error("File is empty or corrupted");
+      }
+
+      console.log("✅ Downloaded to:", downloadedUri);
+
+      // 🔹 Step 4: Save directly to Downloads folder
+      Toast.show({
+        type: "info",
+        text1: "Saving to Downloads...",
+      });
+
+      let savedUri = null;
+
       if (Platform.OS === "android") {
-        const permission = await MediaLibrary.requestPermissionsAsync();
+        try {
+          // Try saving directly using MediaLibrary (no permission dialog)
+          const mediaPermission = await MediaLibrary.requestPermissionsAsync();
 
-        if (!permission.granted) {
-          Toast.show({
-            type: "error",
-            text1: "Storage permission denied",
+          if (mediaPermission.granted) {
+            // Save using MediaLibrary - automatically goes to Downloads
+            const asset = await MediaLibrary.createAssetAsync(downloadedUri);
+
+            // Get Downloads album or create it
+            let album = await MediaLibrary.getAlbumAsync("Downloads");
+            if (album) {
+              await MediaLibrary.addAssetsToAlbumAsync([asset], album);
+            } else {
+              await MediaLibrary.createAlbumAsync("Downloads", asset);
+            }
+
+            savedUri = asset.uri;
+            console.log("✅ Saved via MediaLibrary:", savedUri);
+          } else {
+            // If MediaLibrary permission denied, use DocumentDirectory
+            const docUri = FileSystem.documentDirectory + fileName;
+            await FileSystem.copyAsync({
+              from: downloadedUri,
+              to: docUri,
+            });
+            savedUri = docUri;
+            console.log("⚠️ MediaLibrary permission denied, saved to:", docUri);
+          }
+        } catch (androidError) {
+          console.log("⚠️ MediaLibrary failed:", androidError);
+
+          // Final fallback: DocumentDirectory
+          try {
+            const docUri = FileSystem.documentDirectory + fileName;
+            await FileSystem.copyAsync({
+              from: downloadedUri,
+              to: docUri,
+            });
+            savedUri = docUri;
+            console.log("✅ Saved to DocumentDirectory:", docUri);
+          } catch (fallbackError) {
+            console.log("❌ All save methods failed:", fallbackError);
+            throw fallbackError;
+          }
+        }
+      } else {
+        // iOS: Save to DocumentDirectory/Downloads
+        const iosDirUri = FileSystem.documentDirectory + "Downloads/";
+        const dirInfo = await FileSystem.getInfoAsync(iosDirUri);
+
+        if (!dirInfo.exists) {
+          await FileSystem.makeDirectoryAsync(iosDirUri, {
+            intermediates: true,
           });
-          return;
         }
 
-        const asset = await MediaLibrary.createAssetAsync(uri);
-        await MediaLibrary.createAlbumAsync("Download", asset, false);
+        const iosUri = iosDirUri + fileName;
+        await FileSystem.copyAsync({
+          from: downloadedUri,
+          to: iosUri,
+        });
+        savedUri = iosUri;
+      }
+
+      // 🔹 Clean up temp file
+      try {
+        await FileSystem.deleteAsync(downloadedUri);
+      } catch (e) {
+        console.log("⚠️ Could not delete temp file");
       }
 
       Toast.show({
         type: "success",
-        text1: "Download completed",
+        text1: "Download complete",
+        text2: `${fileName} saved successfully`,
       });
 
-      lastProgress = 0;
+      console.log("✅ File saved:", savedUri);
     } catch (error) {
       console.log("❌ Download error:", error);
+
       Toast.show({
         type: "error",
         text1: "Download failed",
+        text2: error?.message || "Unable to save document",
       });
-      lastProgress = 0;
     }
   };
   // Delete Documents
@@ -538,7 +784,7 @@ const HRRecords = () => {
         />
 
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
           style={styles.modalWrapper}
         >
           <View style={styles.sheet}>
@@ -578,6 +824,7 @@ const HRRecords = () => {
             </TouchableOpacity>
 
             {/* Selected Files List */}
+            <ScrollView style={{ height: 150, marginBottom: 12 }} keyboardShouldPersistTaps="handled">
             {files.length > 0 && (
               <View style={{ marginTop: 12 }}>
                 {files.map((f, idx) => (
@@ -607,6 +854,7 @@ const HRRecords = () => {
                 ))}
               </View>
             )}
+            </ScrollView>
 
             {/* Upload */}
             <TouchableOpacity
@@ -781,7 +1029,7 @@ const HRRecords = () => {
         <FlatList
           data={filteredDocuments}
           keyExtractor={(item) => item._id}
-          contentContainerStyle={{paddingTop: 0, paddingBottom: 80 }}
+          contentContainerStyle={{ paddingTop: 0, paddingBottom: 180 }}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefreshAll} />
           }

@@ -46,7 +46,7 @@ const Housing_Slum = () => {
 
   const [modalVisible, setModalVisible] = useState(false);
   const [docName, setDocName] = useState("");
-  const [docKey, setDocKey] = useState("FINANCIAL_ADVISORY"); // default document type
+  const [docKey, setDocKey] = useState("Housing_&_Slum"); // default document type
   const [files, setFiles] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -58,7 +58,7 @@ const Housing_Slum = () => {
   const [adminUploadDocument, { isLoadingDocument, error }] =
     useAdminUploadDocumentMutation();
   const { data: documentCategoriesData, refetch } =
-    useGetDocumentWithCategoriesQuery({ docKey: "FINANCIAL_ADVISORY" });
+    useGetDocumentWithCategoriesQuery({ docKey: "Housing_&_Slum" });
     const [deleteDocument] = useAdminDocumentDeleteMutation({});
 
 
@@ -208,7 +208,7 @@ const Housing_Slum = () => {
       const formData = new FormData();
 
       formData.append("docName", docName.trim());
-      formData.append("docKey", docKey || "FINANCIAL_ADVISORY");
+      formData.append("docKey", docKey || "Housing_&_Slum");
 
       files.forEach((f, index) => {
         if (!f?.uri) return;
@@ -229,7 +229,7 @@ const Housing_Slum = () => {
 
       setFiles([]);
       setDocName("");
-      setDocKey("FINANCIAL_ADVISORY");
+      setDocKey("Housing_&_Slum");
       setModalVisible(false);
     } catch (err) {
       console.log("❌ Upload error FULL:", err);
@@ -765,7 +765,7 @@ const Housing_Slum = () => {
         <FlatList
           data={filteredDocuments}
           keyExtractor={(item) => item._id}
-          contentContainerStyle={{ paddingTop: 0, paddingBottom: 80 }}
+          contentContainerStyle={{ paddingTop: 0, paddingBottom: 180 }}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefreshAll} />
           }

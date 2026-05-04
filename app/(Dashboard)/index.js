@@ -520,7 +520,7 @@ const Index = () => {
                     <Ionicons
                       name="notifications-outline"
                       size={22}
-                      color="#111827"
+                      color="#111827" style={{marginTop: 6}}
                     />
                     <View style={styles.notificationDot} />
                   </TouchableOpacity>
@@ -558,7 +558,7 @@ const Index = () => {
                     }
                   }}
                 >
-                  <MaterialIcons name="logout" size={24} color="#ef4444" />
+                  <MaterialIcons name="logout" size={24} color="#ef4444" style={{marginBottom: 5}} />
                   {/* <Ionicons name="logout" size={24} color="#ef4444" /> */}
                 </TouchableOpacity>
               </View>
@@ -1176,6 +1176,7 @@ const styles = StyleSheet.create({
 
   notificationDot: {
     position: "absolute",
+    marginTop: 6,
     top: 0,
     right: 0,
     width: 8,
