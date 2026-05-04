@@ -46,7 +46,7 @@ const Sewage_Treatment = () => {
 
   const [modalVisible, setModalVisible] = useState(false);
   const [docName, setDocName] = useState("");
-  const [docKey, setDocKey] = useState("FINANCIAL_ADVISORY"); // default document type
+  const [docKey, setDocKey] = useState("Sewage_Treatment"); // default document type
   const [files, setFiles] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -58,7 +58,7 @@ const Sewage_Treatment = () => {
   const [adminUploadDocument, { isLoadingDocument, error }] =
     useAdminUploadDocumentMutation();
   const { data: documentCategoriesData, refetch } =
-    useGetDocumentWithCategoriesQuery({ docKey: "FINANCIAL_ADVISORY" });
+    useGetDocumentWithCategoriesQuery({ docKey: "Sewage_Treatment" });
     const [deleteDocument] = useAdminDocumentDeleteMutation({});
 
 
@@ -208,7 +208,7 @@ const Sewage_Treatment = () => {
       const formData = new FormData();
 
       formData.append("docName", docName.trim());
-      formData.append("docKey", docKey || "FINANCIAL_ADVISORY");
+      formData.append("docKey", docKey || "Sewage_Treatment");
 
       files.forEach((f, index) => {
         if (!f?.uri) return;
@@ -229,7 +229,7 @@ const Sewage_Treatment = () => {
 
       setFiles([]);
       setDocName("");
-      setDocKey("FINANCIAL_ADVISORY");
+      setDocKey("Sewage_Treatment");
       setModalVisible(false);
     } catch (err) {
       console.log("❌ Upload error FULL:", err);
@@ -765,7 +765,7 @@ const Sewage_Treatment = () => {
         <FlatList
           data={filteredDocuments}
           keyExtractor={(item) => item._id}
-          contentContainerStyle={{paddingTop: 0, paddingBottom: 80 }}
+          contentContainerStyle={{paddingTop: 0, paddingBottom: 180 }}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefreshAll} />
           }

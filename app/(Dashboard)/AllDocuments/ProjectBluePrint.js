@@ -112,11 +112,6 @@ const ProjectBluePrint = () => {
               <MaterialCommunityIcons name="water" size={26} color="#1976D2" />
             </View>
             <Text style={styles.categoryName}>Drinking Water</Text>
-            <View style={styles.infoPill}>
-              <Text style={styles.infoText}>
-                {filteredDocuments.length} Files
-              </Text>
-            </View>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.categoryCard}
@@ -128,11 +123,6 @@ const ProjectBluePrint = () => {
               <MaterialCommunityIcons name="pipe" size={26} color="#1976D2" />
             </View>
             <Text style={styles.categoryName}>Sewage Treatment Plant</Text>
-            <View style={styles.infoPill}>
-              <Text style={styles.infoText}>
-                {filteredDocuments.length} Files
-              </Text>
-            </View>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.categoryCard}
@@ -148,11 +138,6 @@ const ProjectBluePrint = () => {
               />
             </View>
             <Text style={styles.categoryName}>Storm Water</Text>
-            <View style={styles.infoPill}>
-              <Text style={styles.infoText}>
-                {filteredDocuments.length} Files
-              </Text>
-            </View>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -169,11 +154,6 @@ const ProjectBluePrint = () => {
               />
             </View>
             <Text style={styles.categoryName}>Used Water Management</Text>
-            <View style={styles.infoPill}>
-              <Text style={styles.infoText}>
-                {filteredDocuments.length} Files
-              </Text>
-            </View>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -190,11 +170,6 @@ const ProjectBluePrint = () => {
               />
             </View>
             <Text style={styles.categoryName}>River Front</Text>
-            <View style={styles.infoPill}>
-              <Text style={styles.infoText}>
-                {filteredDocuments.length} Files
-              </Text>
-            </View>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -211,11 +186,6 @@ const ProjectBluePrint = () => {
               />
             </View>
             <Text style={styles.categoryName}>Soil Testing</Text>
-            <View style={styles.infoPill}>
-              <Text style={styles.infoText}>
-                {filteredDocuments.length} Files
-              </Text>
-            </View>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.categoryCard}
@@ -231,11 +201,6 @@ const ProjectBluePrint = () => {
               />
             </View>
             <Text style={styles.categoryName}>Transport Sector</Text>
-            <View style={styles.infoPill}>
-              <Text style={styles.infoText}>
-                {filteredDocuments.length} Files
-              </Text>
-            </View>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.categoryCard}
@@ -251,11 +216,6 @@ const ProjectBluePrint = () => {
               />
             </View>
             <Text style={styles.categoryName}>Housing & Slum</Text>
-            <View style={styles.infoPill}>
-              <Text style={styles.infoText}>
-                {filteredDocuments.length} Files
-              </Text>
-            </View>
           </TouchableOpacity>
         </View>
       </ScrollView>

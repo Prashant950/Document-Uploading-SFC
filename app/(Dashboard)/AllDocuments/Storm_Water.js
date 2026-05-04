@@ -45,7 +45,7 @@ const Storm_Water = () => {
 
   const [modalVisible, setModalVisible] = useState(false);
   const [docName, setDocName] = useState("");
-  const [docKey, setDocKey] = useState("FINANCIAL_ADVISORY"); // default document type
+  const [docKey, setDocKey] = useState("Storm_Water"); // default document type
   const [files, setFiles] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -57,7 +57,7 @@ const Storm_Water = () => {
   const [adminUploadDocument, { isLoadingDocument, error }] =
     useAdminUploadDocumentMutation();
   const { data: documentCategoriesData, refetch } =
-    useGetDocumentWithCategoriesQuery({ docKey: "FINANCIAL_ADVISORY" });
+    useGetDocumentWithCategoriesQuery({ docKey: "Storm_Water" });
     const [deleteDocument] = useAdminDocumentDeleteMutation({});
 
 
@@ -207,7 +207,7 @@ const Storm_Water = () => {
       const formData = new FormData();
 
       formData.append("docName", docName.trim());
-      formData.append("docKey", docKey || "FINANCIAL_ADVISORY");
+      formData.append("docKey", docKey || "Storm_Water");
 
       files.forEach((f, index) => {
         if (!f?.uri) return;
@@ -228,7 +228,7 @@ const Storm_Water = () => {
 
       setFiles([]);
       setDocName("");
-      setDocKey("FINANCIAL_ADVISORY");
+      setDocKey("Storm_Water");
       setModalVisible(false);
     } catch (err) {
       console.log("❌ Upload error FULL:", err);
@@ -487,27 +487,27 @@ const Storm_Water = () => {
     }
   };
 
-  // const handleRenameDocument = async (doc) => {
-  //   try {
-  //     if (!doc?._id) {
-  //       Toast.show({ type: "error", text1: "Invalid document" });
-  //       return;
-  //     }
+  const handleRenameDocument = async (doc) => {
+    try {
+      if (!doc?._id) {
+        Toast.show({ type: "error", text1: "Invalid document" });
+        return;
+      }
 
-  //     setLoadingAction({ type: "rename", id: doc._id });
+      setLoadingAction({ type: "rename", id: doc._id });
 
-  //     // Rename logic here
+      // Rename logic here
 
-  //     setLoadingAction(null);
-  //   } catch (error) {
-  //     console.log("❌ Rename error:", error);
-  //     Toast.show({
-  //       type: "error",
-  //       text1: "Rename failed",
-  //     });
-  //     setLoadingAction(null);
-  //   }
-  // };
+      setLoadingAction(null);
+    } catch (error) {
+      console.log("❌ Rename error:", error);
+      Toast.show({
+        type: "error",
+        text1: "Rename failed",
+      });
+      setLoadingAction(null);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -764,7 +764,7 @@ const Storm_Water = () => {
         <FlatList
           data={filteredDocuments}
           keyExtractor={(item) => item._id}
-          contentContainerStyle={{paddingTop: 0, paddingBottom: 80 }}
+          contentContainerStyle={{paddingTop: 0, paddingBottom: 180 }}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefreshAll} />
           }

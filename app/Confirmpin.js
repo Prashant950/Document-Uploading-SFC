@@ -107,7 +107,7 @@ const handleConfirm = async () => {
     setPin(["", "", "", ""]);
   }
 };
-
+   
   const handleForgotPin = () => {
     Alert.alert("Forgot PIN", "Your PIN will be permanently deleted", [
       { text: "Cancel", style: "cancel" },

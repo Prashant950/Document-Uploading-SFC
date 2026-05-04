@@ -2151,7 +2151,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View,ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Toast from "react-native-toast-message";
@@ -2668,7 +2668,7 @@ const Contracts = () => {
         />
 
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
           style={styles.modalWrapper}
         >
           <View style={styles.sheet}>
@@ -2708,6 +2708,7 @@ const Contracts = () => {
             </TouchableOpacity>
 
             {/* Selected Files List */}
+             <ScrollView style={{ height: 150, marginBottom: 12 }} keyboardShouldPersistTaps="handled">
             {files.length > 0 && (
               <View style={{ marginTop: 12 }}>
                 {files.map((f, idx) => (
@@ -2737,6 +2738,7 @@ const Contracts = () => {
                 ))}
               </View>
             )}
+            </ScrollView>
 
             {/* Upload */}
             <TouchableOpacity
@@ -2911,7 +2913,7 @@ const Contracts = () => {
         <FlatList
           data={filteredDocuments}
           keyExtractor={(item) => item._id}
-          contentContainerStyle={{ paddingTop: 0, paddingBottom: 80 }}
+          contentContainerStyle={{ paddingTop: 0, paddingBottom: 180 }}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefreshAll} />
           }
