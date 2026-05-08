@@ -241,7 +241,7 @@ useEffect(() => {
       // Close the action modal immediately so returning from external viewers
       setActionVisible(false);
 
-      const token = await AsyncStorage.getItem("token");
+    const token = await AsyncStorage.getItem("token");
 
       // Ensure filename contains an extension so Android can resolve a viewer
       let fileName = doc.originalName || `document_${Date.now()}`;

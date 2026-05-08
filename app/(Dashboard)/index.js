@@ -512,6 +512,20 @@ const Index = () => {
 
               {/* //  logout button */}
               <View style={styles.headerRight}>
+                {role === "admin" && (
+                  <TouchableOpacity
+                    style={styles.notification}
+                    onPress={() => router.push("/(Dashboard)/AllDocuments/DigiLocker")}
+                  >
+                    <MaterialIcons
+                      name="folder"
+                      size={22}
+                      color="#3B82F6"
+                      style={{marginTop: 6}}
+                    />
+                  </TouchableOpacity>
+                )}
+
                 {role !== "user" && (
                   <TouchableOpacity
                     style={styles.notification}

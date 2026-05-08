@@ -22,7 +22,7 @@ export const apiSlice = createApi({
       return headers;
     },
   }),
-  tagTypes: ["Documents"],
+  tagTypes: ["Documents", "DocumentCategories"],
 
   endpoints: (builder) => ({
     Adminpincreate: builder.mutation({
@@ -247,6 +247,78 @@ export const apiSlice = createApi({
         method: "GET",
       }),
     }),
+
+    // DigiLocker Category APIs
+    getAllDocumentCategories: builder.query({
+      query: () => ({
+        url: "admin/document-categories",
+        method: "GET",
+      }),
+      providesTags: ["DocumentCategories"],
+      transformResponse: (response) => {
+        // Ensure categories array exists
+        return {
+          categories: Array.isArray(response?.categories)
+            ? response.categories
+            : [],
+        };
+      },
+    }),
+
+    createDocumentCategory: builder.mutation({
+      query: (data) => ({
+        url: "admin/document-categories",
+        method: "POST",
+        body: data,
+      }),
+      invalidatesTags: ["DocumentCategories"],
+      transformResponse: (response) => {
+        // Ensure response has required fields
+        return {
+          _id: response?._id || "",
+          name: response?.name || "",
+          description: response?.description || "",
+          icon: response?.icon || "folder",
+          documentCount: response?.documentCount || 0,
+          createdAt: response?.createdAt,
+        };
+      },
+    }),
+
+    updateDocumentCategory: builder.mutation({
+      query: ({ id, ...data }) => ({
+        url: `admin/document-categories/${id}`,
+        method: "PATCH",
+        body: data,
+      }),
+      invalidatesTags: ["DocumentCategories"],
+      transformResponse: (response) => {
+        // Ensure response has required fields
+        return {
+          _id: response?._id || "",
+          name: response?.name || "",
+          description: response?.description || "",
+          icon: response?.icon || "folder",
+          documentCount: response?.documentCount || 0,
+          createdAt: response?.createdAt,
+        };
+      },
+    }),
+
+    deleteDocumentCategory: builder.mutation({
+      query: (id) => ({
+        url: `admin/document-categories/${id}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["DocumentCategories"],
+      transformResponse: (response) => {
+        // Ensure we have a valid response
+        return {
+          message: response?.message || "Category deleted successfully",
+          success: true,
+        };
+      },
+    }),
   }),
 });
 
@@ -286,4 +358,9 @@ export const {
   useUserCreatePinMutation,
   useUserConfirmPinMutation,
   useGetUserNameQuery,
+
+  useGetAllDocumentCategoriesQuery,
+  useCreateDocumentCategoryMutation,
+  useUpdateDocumentCategoryMutation,
+  useDeleteDocumentCategoryMutation,
 } = apiSlice;

@@ -275,7 +275,7 @@ import { Stack,useRouter } from "expo-router";
 import { Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-const _layout = () => {
+export default function Layout() {
   const router = useRouter();
 
   return (
@@ -283,7 +283,7 @@ const _layout = () => {
       screenOptions={{
         headerTitleAlign: "center",
         headerStyle: { backgroundColor: "#1976D2" },
-        headerTitleStyle: { color: "#FFFFFF", fontWeight: "700" },
+        headerTitleStyle: { color: "#f1efef", fontWeight: "700" },
         headerTintColor: "#FFFFFF",
         headerShown: true,
         headerLeft: () => (
@@ -345,9 +345,11 @@ const _layout = () => {
         name="ShareDocumentWithOTP"
         options={{ title: "Share Document With OTP" }}
       />
-    </Stack>
+      <Stack.Screen
+      name="DigiLocker"
+      options={{ title: "Folder" }}
+     />
+     <Stack.Screen name="[categoryId]" options={({ route }) => ({ title: decodeURIComponent(route.params.categoryId) })} />
+    </Stack>  
   );
 };
-
-export default _layout;
-      

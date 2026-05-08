@@ -262,33 +262,11 @@ const styles = StyleSheet.create({
     color: "#334155",
     marginBottom: 12,
   },
-
-  assetRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
   assetIcon: {
     width: 36,
     height: 36,
     backgroundColor: "#E0ECFF",
     borderRadius: 8,
-  },
-  assetText: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  assetTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#0F172A",
-  },
-  assetDesc: {
-    fontSize: 12,
-    color: "#64748B",
-    marginTop: 2,
-  },
-  lock: {
-    fontSize: 16,
   },
   divider: {
     height: 1,
