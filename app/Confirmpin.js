@@ -186,7 +186,7 @@ const handleConfirm = async () => {
                 index === pin.findIndex((v) => v === "") && styles.activeBox,
               ]}
               value={digit}
-              keyboardType="number-pad"
+              keyboardType="numeric"
               inputMode="numeric"
               pattern="[0-9]*" 
               maxLength={1}

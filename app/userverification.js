@@ -25,7 +25,7 @@ import {
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const CORRECT_OTP = "123456";
 
-const userverification = () => {
+const Userverification = () => {
   const router = useRouter();
 
   const [requestUserverificationAccess, isLoading] =
@@ -394,7 +394,7 @@ const userverifywithOTP = async () => {
   );
 };
 
-export default userverification;
+export default Userverification;
 
 const BOX_SIZE = (SCREEN_WIDTH - 80) / 6;
 
@@ -449,7 +449,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "600",
     gap: 20,
-    borderColor: "#2563EB",
+    // borderColor: "#2563EB",
     marginHorizontal: 1,
   },
 
